@@ -1,0 +1,77 @@
+package com.daniel.reproductor.data.remote
+
+import com.daniel.reproductor.data.YouTubeLinks
+import com.daniel.reproductor.data.db.Song
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+import org.schabi.newpipe.extractor.ServiceList
+import org.schabi.newpipe.extractor.exceptions.AgeRestrictedContentException
+import org.schabi.newpipe.extractor.exceptions.ContentNotAvailableException
+import org.schabi.newpipe.extractor.exceptions.GeographicRestrictionException
+import org.schabi.newpipe.extractor.exceptions.PaidContentException
+import org.schabi.newpipe.extractor.exceptions.PrivateContentException
+import org.schabi.newpipe.extractor.exceptions.ReCaptchaException
+import org.schabi.newpipe.extractor.search.SearchInfo
+import org.schabi.newpipe.extractor.services.youtube.linkHandler.YoutubeSearchQueryHandlerFactory
+import org.schabi.newpipe.extractor.stream.AudioStream
+import org.schabi.newpipe.extractor.stream.StreamInfoItem
+import org.schabi.newpipe.extractor.stream.DeliveryMethod
+import org.schabi.newpipe.extractor.stream.StreamInfo
+import java.io.IOException
+
+class YouTubeResolver {
+
+    /** Acepta un link de YouTube o un videoId. Nunca guardes la URL del audio: caduca en horas. */
+    suspend fun getInfo(urlOrId: String): StreamInfo = withContext(Dispatchers.IO) {
+        val url = if (urlOrId.startsWith("http")) urlOrId
+        else "https://www.youtube.com/watch?v=$urlOrId"
+        StreamInfo.getInfo(ServiceList.YouTube, url)
+    }
+
+    /**
+     * Busca en YouTube. Con [musicOnly] usa el catálogo de YouTube Music (solo canciones).
+     * Devuelve las canciones listas para guardar, sin tener que resolver cada una.
+     */
+    suspend fun search(query: String, musicOnly: Boolean): List<Song> = withContext(Dispatchers.IO) {
+        val service = ServiceList.YouTube
+        val filter = if (musicOnly) YoutubeSearchQueryHandlerFactory.MUSIC_SONGS
+        else YoutubeSearchQueryHandlerFactory.VIDEOS
+        val handler = service.searchQHFactory.fromQuery(query, listOf(filter), "")
+        SearchInfo.getInfo(service, handler).relatedItems
+            .filterIsInstance<StreamInfoItem>()
+            .filter { it.duration > 0 } // sin transmisiones en vivo
+            .mapNotNull { item ->
+                val id = YouTubeLinks.extractVideoId(item.url) ?: return@mapNotNull null
+                Song(
+                    videoId = id,
+                    title = item.name,
+                    uploader = item.uploaderName.orEmpty(),
+                    durationSec = item.duration,
+                    thumbnailUrl = item.thumbnails.maxByOrNull { it.height }?.url.orEmpty(),
+                )
+            }
+    }
+
+    /** Mejor audio descargable de una sola URL (m4a o webm/opus), ignorando DASH/HLS. */
+    fun bestAudio(info: StreamInfo): AudioStream {
+        val streams = info.audioStreams
+        return streams.filter { it.deliveryMethod == DeliveryMethod.PROGRESSIVE_HTTP }
+            .maxByOrNull { it.averageBitrate }
+            ?: streams.maxByOrNull { it.averageBitrate }
+            ?: throw ContentNotAvailableException("El video no tiene pistas de audio")
+    }
+
+    companion object {
+        /** Mensaje legible para mostrar al usuario. */
+        fun describeError(e: Throwable): String = when (e) {
+            is AgeRestrictedContentException -> "Video restringido por edad."
+            is PrivateContentException -> "El video es privado."
+            is GeographicRestrictionException -> "El video no está disponible en tu país."
+            is PaidContentException -> "El video es de pago."
+            is ContentNotAvailableException -> "El video no está disponible (eliminado o bloqueado)."
+            is ReCaptchaException -> "YouTube pidió un captcha. Espera un rato e intenta de nuevo."
+            is IOException -> "Error de red. Revisa tu conexión."
+            else -> "No se pudo resolver el video. Puede que haya que actualizar NewPipe Extractor.\n(${e.javaClass.simpleName}: ${e.message})"
+        }
+    }
+}

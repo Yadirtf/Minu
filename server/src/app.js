@@ -1,0 +1,253 @@
+import express from 'express';
+import bcrypt from 'bcryptjs';
+import { cleanSong, dedications, libraries, publicUser, toId, users } from './db.js';
+import { requireAuth, signToken } from './auth.js';
+
+const USERNAME = /^[a-z0-9_.]{3,24}$/;
+const EMOJIS = new Set(['❤️', '😍', '🔥', '😘', '💃', '🎶']);
+
+/**
+ * API REST de Minu. [realtime] permite avisar al otro celular al instante
+ * (notify devuelve true si estaba conectado).
+ */
+export function createApp(db, config, realtime) {
+  const app = express();
+  app.disable('x-powered-by');
+  app.use(express.json({ limit: '3mb' }));
+
+  const auth = requireAuth(db, config);
+  const loginLimiter = rateLimiter(10, 60_000);
+
+  app.get('/', (_req, res) => res.json({ app: 'minu', ok: true }));
+  app.get('/health', (_req, res) => res.json({ ok: true }));
+
+  // ---------- Cuentas ----------
+
+  app.post('/auth/register', loginLimiter, async (req, res) => {
+    const { username, password, displayName, inviteCode } = req.body ?? {};
+    if (inviteCode !== config.registrationCode) return fail(res, 403, 'Código de invitación incorrecto.');
+    const name = String(username || '').trim().toLowerCase();
+    if (!USERNAME.test(name)) return fail(res, 400, 'El usuario debe tener de 3 a 24 letras, números, punto o guion bajo.');
+    if (typeof password !== 'string' || password.length < 6) return fail(res, 400, 'La contraseña debe tener al menos 6 caracteres.');
+
+    const user = {
+      username: name,
+      displayName: String(displayName || name).trim().slice(0, 40) || name,
+      passwordHash: await bcrypt.hash(password, 10),
+      createdAt: new Date(),
+      partnerId: null,
+      partnerRequestTo: null,
+    };
+    try {
+      const { insertedId } = await users(db).insertOne(user);
+      user._id = insertedId;
+    } catch (e) {
+      if (e.code === 11000) return fail(res, 409, 'Ese usuario ya existe.');
+      throw e;
+    }
+    res.status(201).json({ token: signToken(user, config), user: publicUser(user) });
+  });
+
+  app.post('/auth/login', loginLimiter, async (req, res) => {
+    const { username, password } = req.body ?? {};
+    const user = await users(db).findOne({ username: String(username || '').trim().toLowerCase() });
+    if (!user || !(await bcrypt.compare(String(password || ''), user.passwordHash))) {
+      return fail(res, 401, 'Usuario o contraseña incorrectos.');
+    }
+    res.json({ token: signToken(user, config), user: publicUser(user) });
+  });
+
+  app.get('/me', auth, (req, res) => res.json({ user: publicUser(req.user) }));
+
+  // ---------- Biblioteca (respaldo en la nube) ----------
+
+  app.get('/library', auth, async (req, res) => {
+    const doc = await libraries(db).findOne({ _id: req.user._id });
+    res.json({ data: doc?.data ?? null, updatedAt: doc?.updatedAt?.getTime() ?? 0 });
+  });
+
+  app.put('/library', auth, async (req, res) => {
+    const { data } = req.body ?? {};
+    if (!data || typeof data !== 'object' || !Array.isArray(data.playlists)) {
+      return fail(res, 400, 'Biblioteca inválida.');
+    }
+    const updatedAt = new Date();
+    await libraries(db).updateOne(
+      { _id: req.user._id },
+      { $set: { data, updatedAt, device: String(req.body.device || '').slice(0, 80) } },
+      { upsert: true },
+    );
+    res.json({ updatedAt: updatedAt.getTime() });
+  });
+
+  // ---------- Pareja ----------
+
+  app.get('/partner', auth, async (req, res) => res.json(await partnerStatus(db, req.user, realtime)));
+
+  app.post('/partner/request', auth, async (req, res) => {
+    const me = req.user;
+    if (me.partnerId) return fail(res, 409, 'Ya tienes una pareja vinculada.');
+    const target = await users(db).findOne({ username: String(req.body?.username || '').trim().toLowerCase() });
+    if (!target) return fail(res, 404, 'No existe ese usuario.');
+    if (target._id.equals(me._id)) return fail(res, 400, 'No puedes vincularte contigo mismo.');
+    if (target.partnerId) return fail(res, 409, 'Esa persona ya tiene pareja vinculada.');
+
+    if (target.partnerRequestTo?.equals(me._id)) {
+      await link(db, me._id, target._id); // ya te había invitado: quedan vinculados
+    } else {
+      await users(db).updateOne({ _id: me._id }, { $set: { partnerRequestTo: target._id } });
+    }
+    realtime.notify(target._id, { type: 'partner.update' });
+    res.json(await partnerStatus(db, await users(db).findOne({ _id: me._id }), realtime));
+  });
+
+  app.post('/partner/accept', auth, async (req, res) => {
+    const me = req.user;
+    const requester = await users(db).findOne({ partnerRequestTo: me._id, partnerId: null });
+    if (!requester || me.partnerId) return fail(res, 404, 'No tienes invitaciones pendientes.');
+    await link(db, me._id, requester._id);
+    realtime.notify(requester._id, { type: 'partner.update' });
+    res.json(await partnerStatus(db, await users(db).findOne({ _id: me._id }), realtime));
+  });
+
+  app.delete('/partner', auth, async (req, res) => {
+    const me = req.user;
+    const other = me.partnerId ?? me.partnerRequestTo;
+    await users(db).updateOne({ _id: me._id }, { $set: { partnerId: null, partnerRequestTo: null } });
+    // Rechazar una invitación recibida también la borra
+    await users(db).updateMany(
+      { $or: [{ partnerId: me._id }, { partnerRequestTo: me._id }] },
+      { $set: { partnerId: null, partnerRequestTo: null } },
+    );
+    if (other) realtime.notify(other, { type: 'partner.update' });
+    res.json(await partnerStatus(db, await users(db).findOne({ _id: me._id }), realtime));
+  });
+
+  // ---------- Dedicatorias ----------
+
+  app.get('/dedications', auth, async (req, res) => {
+    const me = req.user._id;
+    const list = await dedications(db)
+      .find({ $or: [{ to: me }, { from: me }] })
+      .sort({ createdAt: -1 })
+      .limit(100)
+      .toArray();
+    res.json({ dedications: list.map((d) => serializeDedication(d, me)) });
+  });
+
+  app.post('/dedications', auth, async (req, res) => {
+    const me = req.user;
+    if (!me.partnerId) return fail(res, 409, 'Primero vincula a tu pareja.');
+    const song = cleanSong(req.body?.song);
+    if (!song) return fail(res, 400, 'Canción inválida.');
+    const dedication = {
+      from: me._id,
+      to: me.partnerId,
+      fromName: me.displayName,
+      song,
+      message: String(req.body?.message || '').slice(0, 500),
+      autoplay: Boolean(req.body?.autoplay),
+      createdAt: new Date(),
+      seenAt: null,
+      reactions: [],
+    };
+    const { insertedId } = await dedications(db).insertOne(dedication);
+    dedication._id = insertedId;
+    const delivered = realtime.notify(me.partnerId, {
+      type: 'dedication',
+      dedication: serializeDedication(dedication, me.partnerId),
+    });
+    res.status(201).json({ dedication: serializeDedication(dedication, me._id), delivered });
+  });
+
+  app.post('/dedications/:id/seen', auth, async (req, res) => {
+    const id = toId(req.params.id);
+    if (!id) return fail(res, 404, 'No encontrada.');
+    const { modifiedCount } = await dedications(db).updateOne(
+      { _id: id, to: req.user._id, seenAt: null },
+      { $set: { seenAt: new Date() } },
+    );
+    if (modifiedCount) {
+      const d = await dedications(db).findOne({ _id: id });
+      realtime.notify(d.from, { type: 'dedication.update', dedication: serializeDedication(d, d.from) });
+    }
+    res.json({ ok: true });
+  });
+
+  app.post('/dedications/:id/react', auth, async (req, res) => {
+    const id = toId(req.params.id);
+    const emoji = String(req.body?.emoji || '');
+    if (!id || !EMOJIS.has(emoji)) return fail(res, 400, 'Reacción inválida.');
+    const d = await dedications(db).findOneAndUpdate(
+      { _id: id, $or: [{ to: req.user._id }, { from: req.user._id }] },
+      { $push: { reactions: { $each: [{ by: req.user._id, emoji, at: new Date() }], $slice: -30 } } },
+      { returnDocument: 'after' },
+    );
+    if (!d) return fail(res, 404, 'No encontrada.');
+    const other = d.from.equals(req.user._id) ? d.to : d.from;
+    realtime.notify(other, { type: 'dedication.update', dedication: serializeDedication(d, other) });
+    res.json({ dedication: serializeDedication(d, req.user._id) });
+  });
+
+  app.use((err, _req, res, _next) => {
+    if (err.type === 'entity.too.large') return fail(res, 413, 'Los datos son demasiado grandes.');
+    if (err.type === 'entity.parse.failed') return fail(res, 400, 'JSON inválido.');
+    console.error(err);
+    fail(res, 500, 'Error del servidor.');
+  });
+
+  return app;
+}
+
+async function link(db, a, b) {
+  await users(db).updateOne({ _id: a }, { $set: { partnerId: b, partnerRequestTo: null } });
+  await users(db).updateOne({ _id: b }, { $set: { partnerId: a, partnerRequestTo: null } });
+}
+
+export async function partnerStatus(db, me, realtime) {
+  if (me.partnerId) {
+    const partner = await users(db).findOne({ _id: me.partnerId });
+    return { status: 'linked', partner: { ...publicUser(partner), online: realtime.isOnline(partner._id) } };
+  }
+  if (me.partnerRequestTo) {
+    const target = await users(db).findOne({ _id: me.partnerRequestTo });
+    return { status: 'sent', partner: publicUser(target) };
+  }
+  const requester = await users(db).findOne({ partnerRequestTo: me._id, partnerId: null });
+  if (requester) return { status: 'received', partner: publicUser(requester) };
+  return { status: 'none', partner: null };
+}
+
+function serializeDedication(d, viewer) {
+  return {
+    id: d._id.toString(),
+    incoming: d.to.equals(viewer),
+    fromName: d.fromName,
+    song: d.song,
+    message: d.message,
+    autoplay: d.autoplay,
+    createdAt: d.createdAt.getTime(),
+    seenAt: d.seenAt ? d.seenAt.getTime() : null,
+    reactions: (d.reactions ?? []).map((r) => ({ emoji: r.emoji, mine: r.by.equals(viewer), at: r.at.getTime() })),
+  };
+}
+
+function fail(res, status, error) {
+  return res.status(status).json({ error });
+}
+
+/** Límite simple por IP para evitar fuerza bruta en el inicio de sesión. */
+function rateLimiter(max, windowMs) {
+  const hits = new Map();
+  return (req, res, next) => {
+    const now = Date.now();
+    const key = req.ip;
+    const entry = hits.get(key);
+    if (!entry || now - entry.start > windowMs) {
+      hits.set(key, { start: now, count: 1 });
+      return next();
+    }
+    if (++entry.count > max) return fail(res, 429, 'Demasiados intentos. Espera un minuto.');
+    next();
+  };
+}

@@ -1,0 +1,21 @@
+# Blueprint de Render: crea el servicio del servidor de Minu desde este repositorio.
+# En Render: New > Blueprint > elige el repo. Te pedirá MONGODB_URI y REGISTRATION_CODE.
+services:
+  - type: web
+    name: minu-server
+    runtime: node
+    plan: free
+    rootDir: server
+    buildCommand: npm ci --omit=dev
+    startCommand: npm start
+    healthCheckPath: /health
+    autoDeploy: true
+    envVars:
+      - key: NODE_VERSION
+        value: "22"
+      - key: MONGODB_URI # cadena de conexión de MongoDB Atlas (mongodb+srv://...)
+        sync: false
+      - key: REGISTRATION_CODE # código que se pide para crear cuentas (compártelo solo con tu novia)
+        sync: false
+      - key: JWT_SECRET # se genera solo
+        generateValue: true
