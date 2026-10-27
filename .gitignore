@@ -24,3 +24,7 @@ capturas/
 
 # APK generados
 /apk
+
+# Claves de Firebase (nunca a git)
+*firebase-adminsdk*.json
+app/google-services.json

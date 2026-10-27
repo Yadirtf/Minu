@@ -235,3 +235,11 @@ test('notificaciones: dedicatoria e invitación llegan por push si la app está 
   assert.equal(pushes.at(-1).data.type, 'listen.invite');
   ws.close();
 });
+
+test('cuenta de servicio: acepta JSON o base64 y nunca lanza el texto', async () => {
+  const { parseServiceAccount } = await import('../src/services.js');
+  const account = { type: 'service_account', private_key: 'k', client_email: 'a@b.iam.gserviceaccount.com' };
+  assert.deepEqual(parseServiceAccount(JSON.stringify(account)), account);
+  assert.deepEqual(parseServiceAccount(Buffer.from(JSON.stringify(account)).toString('base64')), account);
+  assert.equal(parseServiceAccount('basura-secreta'), null);
+});

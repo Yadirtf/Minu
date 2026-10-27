@@ -18,6 +18,22 @@ export function createGoogleVerifier(clientIds) {
   };
 }
 
+/** Acepta el JSON tal cual o codificado en base64. Devuelve null si no es válido (sin lanzar el texto). */
+export function parseServiceAccount(value) {
+  const text = String(value).trim();
+  const attempts = [text];
+  if (!text.startsWith('{')) attempts.push(Buffer.from(text, 'base64').toString('utf8'));
+  for (const candidate of attempts) {
+    try {
+      const json = JSON.parse(candidate);
+      if (json?.type === 'service_account' && json.private_key && json.client_email) return json;
+    } catch {
+      // se prueba el siguiente formato
+    }
+  }
+  return null;
+}
+
 const DEAD_TOKEN_ERRORS = new Set([
   'messaging/registration-token-not-registered',
   'messaging/invalid-registration-token',
@@ -30,8 +46,15 @@ const DEAD_TOKEN_ERRORS = new Set([
  * empezar a reproducir aunque esté cerrada.
  */
 export function createPush(db, serviceAccountJson) {
-  if (!serviceAccountJson) return { enabled: false, send: async () => 0 };
-  const app = initializeApp({ credential: cert(JSON.parse(serviceAccountJson)) }, 'minu');
+  const disabled = { enabled: false, send: async () => 0 };
+  if (!serviceAccountJson) return disabled;
+  const account = parseServiceAccount(serviceAccountJson);
+  if (!account) {
+    // Nunca imprimir el valor: contiene la clave privada
+    console.error('FIREBASE_SERVICE_ACCOUNT no es un JSON de cuenta de servicio válido. Notificaciones desactivadas.');
+    return disabled;
+  }
+  const app = initializeApp({ credential: cert(account) }, 'minu');
   const messaging = getMessaging(app);
 
   return {
