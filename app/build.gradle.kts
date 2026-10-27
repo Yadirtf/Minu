@@ -21,7 +21,7 @@ android {
     compileSdk = 37
 
     defaultConfig {
-        applicationId = "com.daniel.minu"
+        applicationId = "com.adrian.minu"
         minSdk = 26
         targetSdk = 36
         versionCode = 2
