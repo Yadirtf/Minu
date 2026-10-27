@@ -1,6 +1,8 @@
 package com.daniel.reproductor
 
 import android.Manifest
+import android.content.Intent
+import com.daniel.reproductor.cloud.Push
 import android.graphics.Color as AndroidColor
 import android.os.Build
 import android.os.Bundle
@@ -76,8 +78,14 @@ import com.daniel.reproductor.ui.together.TogetherViewModel
 import androidx.compose.ui.platform.LocalContext
 
 class MainActivity : ComponentActivity() {
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        handleIntent(intent)
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        handleIntent(intent)
         enableEdgeToEdge()
         setContent {
             val lib: LibraryViewModel = viewModel(factory = LibraryViewModel.Factory)
@@ -93,6 +101,13 @@ class MainActivity : ComponentActivity() {
                 AppRoot(lib, settings, player)
             }
         }
+    }
+}
+
+/** Se tocó una notificación de Minu. */
+private fun ComponentActivity.handleIntent(intent: Intent?) {
+    if (intent?.getBooleanExtra(Push.EXTRA_LISTEN_INVITE, false) == true) {
+        (application as ReproductorApp).partnerHub.onListenInviteNotification()
     }
 }
 

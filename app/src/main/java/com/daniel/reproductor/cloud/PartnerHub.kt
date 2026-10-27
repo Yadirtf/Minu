@@ -155,7 +155,7 @@ class PartnerHub(
 
     /** Reproduce una dedicatoria en este celular. */
     fun playDedication(dedication: Dedication) {
-        scope.launch { runCatching { playNow(dedication.song) } }
+        scope.launch { runCatching { playSong(dedication.song) } }
         if (dedication.incoming && dedication.seenAt == null) markSeen(dedication)
     }
 
@@ -176,6 +176,11 @@ class PartnerHub(
     fun acceptListen() {
         _listen.value = ListenSession(ListenMode.ACTIVE, iAmDj = false)
         send(JSONObject().put("type", "listen.join"))
+    }
+
+    /** Se tocó la notificación "quiere escuchar música contigo". */
+    fun onListenInviteNotification() {
+        if (_listen.value.mode == ListenMode.NONE) _listen.value = ListenSession(ListenMode.INVITED)
     }
 
     fun leaveListen() {
@@ -277,7 +282,7 @@ class PartnerHub(
                 val d = CloudApi.parseDedication(msg.getJSONObject("dedication"))
                 upsert(d)
                 _events.tryEmit(HubEvent.IncomingDedication(d))
-                if (d.autoplay) runCatching { playNow(d.song) }
+                if (d.autoplay) runCatching { playSong(d.song) }
             }
             "dedication.update" -> upsert(CloudApi.parseDedication(msg.getJSONObject("dedication")))
             "reaction" -> _events.tryEmit(HubEvent.LiveReaction(msg.optString("emoji"), fromMe = false))
@@ -325,7 +330,8 @@ class PartnerHub(
         }.also { controller = it }
     }
 
-    private suspend fun playNow(song: Song) {
+    /** Reproduce una canción en este celular (dedicatorias). */
+    suspend fun playSong(song: Song) {
         val p = player()
         p.setMediaItem(PlaybackItems.fromSong(song, files))
         p.prepare()

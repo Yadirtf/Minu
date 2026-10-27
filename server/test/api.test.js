@@ -8,8 +8,23 @@ import { createApp } from '../src/app.js';
 import { attachRealtime } from '../src/realtime.js';
 import { ensureIndexes } from '../src/db.js';
 
-const config = { jwtSecret: 'secreto-de-prueba', registrationCode: 'minu-2026' };
+const config = {
+  jwtSecret: 'secreto-de-prueba',
+  registrationCode: 'minu-2026',
+  allowedEmails: ['daniel@gmail.com', 'ana@gmail.com'],
+  loginLimitPerMinute: 1000,
+};
 let mongo, client, server, base;
+
+// Google falso: el token es "google|sub|correo|nombre"
+const verifyGoogle = async (idToken) => {
+  const [kind, sub, email, name] = idToken.split('|');
+  if (kind !== 'google') throw new Error('token inválido');
+  return { sub, email, name };
+};
+// Notificaciones falsas: se guardan para revisarlas
+const pushes = [];
+const push = { enabled: true, send: async (userId, data) => (pushes.push({ userId: String(userId), data }), 1) };
 
 before(async () => {
   mongo = await MongoMemoryServer.create();
@@ -18,8 +33,8 @@ before(async () => {
   const db = client.db('minu-test');
   await ensureIndexes(db);
   const realtime = {};
-  server = http.createServer(createApp(db, config, realtime));
-  Object.assign(realtime, attachRealtime(server, db, config));
+  server = http.createServer(createApp(db, config, realtime, { verifyGoogle, push }));
+  Object.assign(realtime, attachRealtime(server, db, config, push));
   await new Promise((r) => server.listen(0, r));
   base = `http://localhost:${server.address().port}`;
 });
@@ -170,4 +185,53 @@ test('pareja, dedicatorias y tiempo real', async () => {
 
 test('websocket sin token es rechazado', async () => {
   await assert.rejects(() => connect('falso'));
+});
+
+test('Google: solo los correos permitidos crean cuenta, sin código de invitación', async () => {
+  const intruso = await api('POST', '/auth/google', { idToken: 'google|x1|otro@gmail.com|Otro' });
+  assert.equal(intruso.status, 403);
+  assert.equal((await api('POST', '/auth/google', { idToken: 'falso' })).status, 401);
+
+  const first = await api('POST', '/auth/google', { idToken: 'google|g-daniel|daniel@gmail.com|Daniel Duque' });
+  assert.equal(first.status, 201);
+  assert.equal(first.body.user.username, 'daniel2'); // 'daniel' ya existía (otra prueba): se agrega un número
+  assert.equal(first.body.user.displayName, 'Daniel Duque');
+
+  // La segunda vez solo inicia sesión (misma cuenta)
+  const again = await api('POST', '/auth/google', { idToken: 'google|g-daniel|daniel@gmail.com|Daniel Duque' });
+  assert.equal(again.status, 200);
+  assert.equal(again.body.user.id, first.body.user.id);
+  // Una cuenta de Google no tiene contraseña
+  assert.equal((await api('POST', '/auth/login', { username: first.body.user.username, password: '' })).status, 401);
+});
+
+test('notificaciones: dedicatoria e invitación llegan por push si la app está cerrada', async () => {
+  const yo = (await api('POST', '/auth/google', { idToken: 'google|g-yo|daniel@gmail.com|Daniel' })).body;
+  const ana = (await api('POST', '/auth/google', { idToken: 'google|g-ana|ana@gmail.com|Ana' })).body;
+  assert.equal((await api('POST', '/devices', { token: 'fcm-ana' }, ana.token)).status, 200);
+
+  pushes.length = 0;
+  await api('POST', '/partner/request', { username: ana.user.username }, yo.token);
+  assert.equal(pushes.at(-1).data.type, 'partner.request');
+  assert.equal(pushes.at(-1).userId, ana.user.id);
+  await api('POST', '/partner/accept', null, ana.token);
+  assert.equal(pushes.at(-1).data.type, 'partner.accepted');
+
+  const song = { videoId: 'dQw4w9WgXcQ', title: 'Para ti', uploader: 'X', durationSec: 200 };
+  const ded = await api('POST', '/dedications', { song, message: 'Te quiero', autoplay: true }, yo.token);
+  assert.equal(ded.body.delivered, false);
+  assert.equal(ded.body.pushed, true);
+  const p = pushes.at(-1).data;
+  assert.equal(p.type, 'dedication');
+  assert.equal(p.videoId, 'dQw4w9WgXcQ');
+  assert.equal(p.autoplay, true);
+  assert.equal(p.fromName, 'Daniel Duque'); // misma cuenta de Google de la prueba anterior
+
+  // Invitación a escuchar juntos con su app cerrada
+  const ws = await connect(yo.token);
+  ws.send(JSON.stringify({ type: 'listen.invite' }));
+  const start = Date.now();
+  while (pushes.at(-1).data.type !== 'listen.invite' && Date.now() - start < 3000) await new Promise((r) => setTimeout(r, 20));
+  assert.equal(pushes.at(-1).data.type, 'listen.invite');
+  ws.close();
 });

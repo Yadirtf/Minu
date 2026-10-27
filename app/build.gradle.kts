@@ -6,6 +6,10 @@ plugins {
     alias(libs.plugins.ksp)
 }
 
+// Firebase: solo se activa cuando pones app/google-services.json (ver README)
+val hasFirebase = file("google-services.json").exists()
+if (hasFirebase) apply(plugin = "com.google.gms.google-services")
+
 // Firma: los datos están en keystore.properties (fuera de git). Guarda una copia de ese archivo y del .jks.
 val keystoreProps = Properties().apply {
     val file = rootProject.file("keystore.properties")
@@ -24,6 +28,9 @@ android {
         versionName = "1.0"
         // URL del servidor en Render: se cambia en gradle.properties (minu.serverUrl)
         buildConfigField("String", "SERVER_URL", "\"${providers.gradleProperty("minu.serverUrl").getOrElse("")}\"")
+        // "ID de cliente web" de Google para "Continuar con Google" (gradle.properties: minu.googleWebClientId)
+        buildConfigField("String", "GOOGLE_WEB_CLIENT_ID", "\"${providers.gradleProperty("minu.googleWebClientId").getOrElse("")}\"")
+        buildConfigField("boolean", "HAS_FIREBASE", hasFirebase.toString())
         buildConfigField("String", "NEWPIPE_VERSION", "\"${libs.versions.newpipeExtractor.get()}\"")
     }
 
@@ -44,8 +51,7 @@ android {
             signingConfig = signingConfigs.findByName("release")
         }
         debug {
-            // La versión de pruebas se instala aparte y no choca con la firmada
-            applicationIdSuffix = ".debug"
+            // Mismo paquete que la firmada para que Firebase y Google la reconozcan
         }
     }
 
@@ -108,6 +114,12 @@ dependencies {
 
     implementation(libs.reorderable)
     implementation(libs.palette.ktx)
+
+    implementation(platform(libs.firebase.bom))
+    implementation(libs.firebase.messaging)
+    implementation(libs.androidx.credentials)
+    implementation(libs.androidx.credentials.play.services)
+    implementation(libs.googleid)
 
     testImplementation(libs.junit)
     testImplementation(libs.org.json) // org.json real para las pruebas en la JVM

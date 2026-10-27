@@ -56,6 +56,19 @@ class CloudApi(baseClient: OkHttpClient, private val session: Session) {
     suspend fun login(username: String, password: String): Account =
         authResponse(call("POST", "/auth/login", JSONObject().put("username", username).put("password", password), auth = false))
 
+    /** "Continuar con Google": el servidor verifica el token y crea la cuenta si el correo está permitido. */
+    suspend fun googleLogin(idToken: String): Account =
+        authResponse(call("POST", "/auth/google", JSONObject().put("idToken", idToken), auth = false))
+
+    /** Registra este celular para recibir notificaciones. */
+    suspend fun registerDevice(token: String) {
+        call("POST", "/devices", JSONObject().put("token", token))
+    }
+
+    suspend fun unregisterDevice(token: String) {
+        call("DELETE", "/devices", JSONObject().put("token", token))
+    }
+
     /** Copia de la biblioteca en la nube: (datos o null, updatedAt). */
     suspend fun getLibrary(): Pair<JSONObject?, Long> {
         val res = call("GET", "/library")

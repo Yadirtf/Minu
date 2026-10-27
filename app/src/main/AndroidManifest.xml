@@ -35,6 +35,15 @@
             </intent-filter>
         </service>
 
+        <!-- Notificaciones de Firebase (dedicatorias, invitaciones) -->
+        <service
+            android:name=".cloud.MinuMessagingService"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="com.google.firebase.MESSAGING_EVENT" />
+            </intent-filter>
+        </service>
+
         <!-- Recibe links desde "Compartir" de YouTube -->
         <activity
             android:name=".ui.share.ShareActivity"

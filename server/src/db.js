@@ -7,6 +7,8 @@ export const dedications = (db) => db.collection('dedications');
 export async function ensureIndexes(db) {
   await users(db).createIndex({ username: 1 }, { unique: true });
   await users(db).createIndex({ partnerRequestTo: 1 });
+  await users(db).createIndex({ googleSub: 1 }, { unique: true, partialFilterExpression: { googleSub: { $type: 'string' } } });
+  await users(db).createIndex({ email: 1 }, { partialFilterExpression: { email: { $type: 'string' } } });
   await dedications(db).createIndex({ to: 1, createdAt: -1 });
   await dedications(db).createIndex({ from: 1, createdAt: -1 });
 }

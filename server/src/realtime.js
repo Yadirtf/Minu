@@ -16,7 +16,7 @@ const RELAYED = new Set([
  * Tiempo real por WebSocket en /ws. Autenticación con "Authorization: Bearer <token>"
  * o ?token=. Devuelve notify/isOnline para que la API avise al otro celular.
  */
-export function attachRealtime(server, db, config) {
+export function attachRealtime(server, db, config, push = { send: async () => 0 }) {
   const wss = new WebSocketServer({ noServer: true, maxPayload: 64 * 1024 });
   const sockets = new Map(); // userId -> Set<WebSocket>
 
@@ -68,7 +68,9 @@ export function attachRealtime(server, db, config) {
       const partner = await partnerOf(user._id).catch(() => null);
       if (!partner) return;
       const { type, state, emoji } = msg;
-      notify(partner, { type, state, emoji: typeof emoji === 'string' ? emoji.slice(0, 8) : undefined, from: user.displayName });
+      const delivered = notify(partner, { type, state, emoji: typeof emoji === 'string' ? emoji.slice(0, 8) : undefined, from: user.displayName });
+      // La invitación a escuchar juntos también llega como notificación si su app está cerrada
+      if (!delivered && type === 'listen.invite') await push.send(partner, { type: 'listen.invite', fromName: user.displayName });
     });
 
     ws.on('close', async () => {

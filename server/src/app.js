@@ -10,13 +10,16 @@ const EMOJIS = new Set(['❤️', '😍', '🔥', '😘', '💃', '🎶']);
  * API REST de Minu. [realtime] permite avisar al otro celular al instante
  * (notify devuelve true si estaba conectado).
  */
-export function createApp(db, config, realtime) {
+export function createApp(db, config, realtime, services = {}) {
+  const push = services.push ?? { send: async () => 0 };
+  const verifyGoogle = services.verifyGoogle ?? null;
+  const allowed = new Set((config.allowedEmails ?? []).map((e) => e.toLowerCase()));
   const app = express();
   app.disable('x-powered-by');
   app.use(express.json({ limit: '3mb' }));
 
   const auth = requireAuth(db, config);
-  const loginLimiter = rateLimiter(10, 60_000);
+  const loginLimiter = rateLimiter(config.loginLimitPerMinute ?? 10, 60_000);
 
   app.get('/', (_req, res) => res.json({ app: 'minu', ok: true }));
   app.get('/health', (_req, res) => res.json({ ok: true }));
@@ -25,6 +28,7 @@ export function createApp(db, config, realtime) {
 
   app.post('/auth/register', loginLimiter, async (req, res) => {
     const { username, password, displayName, inviteCode } = req.body ?? {};
+    if (!config.registrationCode) return fail(res, 403, 'El registro con contraseña está desactivado. Usa "Continuar con Google".');
     if (inviteCode !== config.registrationCode) return fail(res, 403, 'Código de invitación incorrecto.');
     const name = String(username || '').trim().toLowerCase();
     if (!USERNAME.test(name)) return fail(res, 400, 'El usuario debe tener de 3 a 24 letras, números, punto o guion bajo.');
@@ -51,10 +55,58 @@ export function createApp(db, config, realtime) {
   app.post('/auth/login', loginLimiter, async (req, res) => {
     const { username, password } = req.body ?? {};
     const user = await users(db).findOne({ username: String(username || '').trim().toLowerCase() });
-    if (!user || !(await bcrypt.compare(String(password || ''), user.passwordHash))) {
+    if (!user?.passwordHash || !(await bcrypt.compare(String(password || ''), user.passwordHash))) {
       return fail(res, 401, 'Usuario o contraseña incorrectos.');
     }
     res.json({ token: signToken(user, config), user: publicUser(user) });
+  });
+
+  // Inicio de sesión con Google: solo los correos de ALLOWED_EMAILS pueden crear cuenta
+  app.post('/auth/google', loginLimiter, async (req, res) => {
+    if (!verifyGoogle) return fail(res, 503, 'El inicio con Google no está configurado en el servidor.');
+    let google;
+    try {
+      google = await verifyGoogle(String(req.body?.idToken || ''));
+    } catch {
+      return fail(res, 401, 'No se pudo verificar tu cuenta de Google.');
+    }
+    let user = await users(db).findOne({ googleSub: google.sub });
+    if (!user) {
+      user = await users(db).findOne({ email: google.email });
+      if (user) await users(db).updateOne({ _id: user._id }, { $set: { googleSub: google.sub } });
+    }
+    if (!user) {
+      if (!allowed.has(google.email)) {
+        return fail(res, 403, `El correo ${google.email} no está autorizado. Agrégalo a ALLOWED_EMAILS en Render.`);
+      }
+      user = {
+        username: await freeUsername(db, google.email),
+        displayName: (google.name || google.email.split('@')[0]).slice(0, 40),
+        email: google.email,
+        googleSub: google.sub,
+        passwordHash: null,
+        createdAt: new Date(),
+        partnerId: null,
+        partnerRequestTo: null,
+      };
+      user._id = (await users(db).insertOne(user)).insertedId;
+      res.status(201);
+    }
+    res.json({ token: signToken(user, config), user: publicUser(user) });
+  });
+
+  // Celulares que reciben notificaciones (token de Firebase Cloud Messaging)
+  app.post('/devices', auth, async (req, res) => {
+    const token = String(req.body?.token || '');
+    if (!token || token.length > 4096) return fail(res, 400, 'Token inválido.');
+    await users(db).updateOne({ _id: req.user._id }, { $pull: { fcmTokens: token } });
+    await users(db).updateOne({ _id: req.user._id }, { $push: { fcmTokens: { $each: [token], $slice: -5 } } });
+    res.json({ ok: true });
+  });
+
+  app.delete('/devices', auth, async (req, res) => {
+    await users(db).updateOne({ _id: req.user._id }, { $pull: { fcmTokens: String(req.body?.token || '') } });
+    res.json({ ok: true });
   });
 
   app.get('/me', auth, (req, res) => res.json({ user: publicUser(req.user) }));
@@ -94,8 +146,10 @@ export function createApp(db, config, realtime) {
 
     if (target.partnerRequestTo?.equals(me._id)) {
       await link(db, me._id, target._id); // ya te había invitado: quedan vinculados
+      await push.send(target._id, { type: 'partner.accepted', fromName: me.displayName });
     } else {
       await users(db).updateOne({ _id: me._id }, { $set: { partnerRequestTo: target._id } });
+      await push.send(target._id, { type: 'partner.request', fromName: me.displayName });
     }
     realtime.notify(target._id, { type: 'partner.update' });
     res.json(await partnerStatus(db, await users(db).findOne({ _id: me._id }), realtime));
@@ -106,7 +160,9 @@ export function createApp(db, config, realtime) {
     const requester = await users(db).findOne({ partnerRequestTo: me._id, partnerId: null });
     if (!requester || me.partnerId) return fail(res, 404, 'No tienes invitaciones pendientes.');
     await link(db, me._id, requester._id);
-    realtime.notify(requester._id, { type: 'partner.update' });
+    if (!realtime.notify(requester._id, { type: 'partner.update' })) {
+      await push.send(requester._id, { type: 'partner.accepted', fromName: me.displayName });
+    }
     res.json(await partnerStatus(db, await users(db).findOne({ _id: me._id }), realtime));
   });
 
@@ -157,7 +213,16 @@ export function createApp(db, config, realtime) {
       type: 'dedication',
       dedication: serializeDedication(dedication, me.partnerId),
     });
-    res.status(201).json({ dedication: serializeDedication(dedication, me._id), delivered });
+    // Si su app no está abierta le llega como notificación (y suena si pediste reproducir ya)
+    const pushed = delivered ? 0 : await push.send(me.partnerId, {
+      type: 'dedication',
+      id: insertedId.toString(),
+      fromName: me.displayName,
+      message: dedication.message,
+      autoplay: dedication.autoplay,
+      ...song,
+    });
+    res.status(201).json({ dedication: serializeDedication(dedication, me._id), delivered, pushed: pushed > 0 });
   });
 
   app.post('/dedications/:id/seen', auth, async (req, res) => {
@@ -197,6 +262,15 @@ export function createApp(db, config, realtime) {
   });
 
   return app;
+}
+
+/** Usuario a partir del correo (daniel.r@gmail.com -> daniel.r), sin repetir. */
+async function freeUsername(db, email) {
+  let base = email.split('@')[0].toLowerCase().replace(/[^a-z0-9_.]/g, '').slice(0, 20);
+  if (base.length < 3) base = (base + 'minu').slice(0, 20);
+  let candidate = base;
+  for (let i = 2; await users(db).findOne({ username: candidate }); i++) candidate = `${base}${i}`;
+  return candidate;
 }
 
 async function link(db, a, b) {

@@ -11,6 +11,7 @@ import com.daniel.reproductor.cloud.Dedication
 import com.daniel.reproductor.cloud.ListenSession
 import com.daniel.reproductor.cloud.PartnerHub
 import com.daniel.reproductor.cloud.PartnerStatus
+import com.daniel.reproductor.cloud.Push
 import com.daniel.reproductor.cloud.Session
 import com.daniel.reproductor.cloud.SyncStatus
 import com.daniel.reproductor.data.UserFacingException
@@ -29,6 +30,8 @@ class TogetherViewModel(
     private val api: CloudApi,
     private val sync: CloudSync,
     private val hub: PartnerHub,
+    private val onSignedIn: suspend () -> Unit = {},
+    private val onSigningOut: suspend () -> Unit = {},
 ) : ViewModel() {
 
     val account: StateFlow<Account?> = session.account
@@ -63,21 +66,33 @@ class TogetherViewModel(
 
     fun login(username: String, password: String) = action("¡Hola de nuevo! Sincronizando tu música…") {
         session.signIn(api.login(username.trim(), password))
+        onSignedIn()
         sync.syncNow()
     }
 
     fun register(username: String, password: String, displayName: String, inviteCode: String) =
         action("Cuenta creada. Tu música ya está en la nube ☁️") {
             session.signIn(api.register(username.trim(), password, displayName.trim(), inviteCode.trim()))
+            onSignedIn()
             sync.syncNow()
         }
 
+    /** Con el token que entrega "Continuar con Google". */
+    fun googleLogin(idToken: String) = action("¡Listo! Sincronizando tu música…") {
+        session.signIn(api.googleLogin(idToken))
+        onSignedIn()
+        sync.syncNow()
+    }
+
+    fun showMessage(text: String) = viewModelScope.launch { _messages.send(text) }
+
     fun syncNow() = action("Sincronizado") { sync.syncNow() }
 
-    fun logout() {
+    fun logout() = viewModelScope.launch {
         hub.leaveListen()
+        onSigningOut() // este celular deja de recibir notificaciones
         session.signOut()
-        viewModelScope.launch { _messages.send("Sesión cerrada. Tu música sigue en este celular.") }
+        _messages.send("Sesión cerrada. Tu música sigue en este celular.")
     }
 
     fun requestPartner(username: String) = action { hub.requestPartner(username) }
@@ -108,7 +123,14 @@ class TogetherViewModel(
 
     companion object {
         val Factory = viewModelFactory {
-            initializer { TogetherViewModel(app.session, app.cloudApi, app.cloudSync, app.partnerHub) }
+            initializer {
+                val minu = app
+                TogetherViewModel(
+                    minu.session, minu.cloudApi, minu.cloudSync, minu.partnerHub,
+                    onSignedIn = { Push.register(minu) },
+                    onSigningOut = { Push.unregister(minu) },
+                )
+            }
         }
 
         val EMOJIS = listOf("❤️", "😍", "🔥", "😘", "💃", "🎶")

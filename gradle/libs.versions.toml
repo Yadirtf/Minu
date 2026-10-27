@@ -21,6 +21,10 @@ junit = "4.13.2"
 orgJson = "20250517"
 reorderable = "3.1.0"
 palette = "1.0.0"
+firebaseBom = "35.1.0"
+googleServices = "4.5.0"
+credentials = "1.6.0"
+googleId = "1.2.1"
 robolectric = "4.17"
 roborazzi = "1.77.0"
 
@@ -62,6 +66,11 @@ roborazzi = { module = "io.github.takahirom.roborazzi:roborazzi", version.ref = 
 roborazzi-compose = { module = "io.github.takahirom.roborazzi:roborazzi-compose", version.ref = "roborazzi" }
 androidx-compose-ui-test-junit4 = { module = "androidx.compose.ui:ui-test-junit4" }
 androidx-compose-ui-test-manifest = { module = "androidx.compose.ui:ui-test-manifest" }
+firebase-bom = { module = "com.google.firebase:firebase-bom", version.ref = "firebaseBom" }
+firebase-messaging = { module = "com.google.firebase:firebase-messaging" }
+androidx-credentials = { module = "androidx.credentials:credentials", version.ref = "credentials" }
+androidx-credentials-play-services = { module = "androidx.credentials:credentials-play-services-auth", version.ref = "credentials" }
+googleid = { module = "com.google.android.libraries.identity.googleid:googleid", version.ref = "googleId" }
 palette-ktx = { module = "androidx.palette:palette-ktx", version.ref = "palette" }
 reorderable = { module = "sh.calvin.reorderable:reorderable", version.ref = "reorderable" }
 
@@ -69,3 +78,4 @@ reorderable = { module = "sh.calvin.reorderable:reorderable", version.ref = "reo
 android-application = { id = "com.android.application", version.ref = "agp" }
 kotlin-compose = { id = "org.jetbrains.kotlin.plugin.compose", version.ref = "kotlin" }
 ksp = { id = "com.google.devtools.ksp", version.ref = "ksp" }
+google-services = { id = "com.google.gms.google-services", version.ref = "googleServices" }

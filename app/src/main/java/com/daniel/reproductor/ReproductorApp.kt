@@ -8,6 +8,7 @@ import androidx.work.WorkManager
 import com.daniel.reproductor.cloud.CloudApi
 import com.daniel.reproductor.cloud.CloudSync
 import com.daniel.reproductor.cloud.PartnerHub
+import com.daniel.reproductor.cloud.Push
 import com.daniel.reproductor.cloud.Session
 import com.daniel.reproductor.data.AppSettings
 import com.daniel.reproductor.data.MusicFiles
@@ -20,6 +21,7 @@ import com.daniel.reproductor.data.remote.YouTubeResolver
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.launch
 import okhttp3.OkHttpClient
 import org.schabi.newpipe.extractor.NewPipe
 import java.util.concurrent.TimeUnit
@@ -57,6 +59,8 @@ class ReproductorApp : Application() {
         super.onCreate()
         NewPipe.init(OkHttpDownloader(okHttpClient))
         cloudSync.watch(database)
+        Push.createChannels(this)
+        appScope.launch { Push.register(this@ReproductorApp) } // por si cambió el token de notificaciones
 
         ProcessLifecycleOwner.get().lifecycle.addObserver(object : DefaultLifecycleObserver {
             override fun onStart(owner: LifecycleOwner) {

@@ -1,5 +1,6 @@
 package com.daniel.reproductor.ui.together
 
+import androidx.activity.compose.LocalActivity
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -19,6 +20,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.Logout
+import androidx.compose.material.icons.filled.AccountCircle
 import androidx.compose.material.icons.filled.Cloud
 import androidx.compose.material.icons.filled.CloudDone
 import androidx.compose.material.icons.filled.CloudOff
@@ -36,6 +38,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
@@ -45,7 +48,9 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.daniel.reproductor.BuildConfig
 import com.daniel.reproductor.ui.components.PillButton
+import kotlinx.coroutines.launch
 import com.daniel.reproductor.ui.components.ScreenTitle
 import com.daniel.reproductor.ui.theme.LocalAppStyle
 import java.text.DateFormat
@@ -74,6 +79,10 @@ fun AccountScreen(vm: TogetherViewModel, onBack: () -> Unit) {
 private fun SignInForm(vm: TogetherViewModel) {
     val busy by vm.busy.collectAsStateWithLifecycle()
     val style = LocalAppStyle.current
+    val activity = LocalActivity.current
+    val scope = rememberCoroutineScope()
+    val googleReady = BuildConfig.GOOGLE_WEB_CLIENT_ID.isNotBlank()
+    var withPassword by rememberSaveable { mutableStateOf(!googleReady) }
     var registering by rememberSaveable { mutableStateOf(false) }
     var username by rememberSaveable { mutableStateOf("") }
     var password by rememberSaveable { mutableStateOf("") }
@@ -89,43 +98,67 @@ private fun SignInForm(vm: TogetherViewModel) {
         color = MaterialTheme.colorScheme.onSurfaceVariant,
     )
     Spacer(Modifier.height(20.dp))
-    SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
-        listOf("Iniciar sesión", "Crear cuenta").forEachIndexed { i, label ->
-            SegmentedButton(
-                selected = registering == (i == 1),
-                onClick = { registering = i == 1 },
-                shape = SegmentedButtonDefaults.itemShape(i, 2, style.cardShape),
-                icon = {},
-            ) { Text(style.label(label)) }
-        }
-    }
-    Spacer(Modifier.height(16.dp))
-    Field(username, { username = it }, "Usuario")
-    if (registering) Field(displayName, { displayName = it }, "Tu nombre (lo verá tu pareja)")
-    Field(password, { password = it }, "Contraseña", password = true)
-    if (registering) Field(invite, { invite = it }, "Código de invitación")
 
-    TextButton(onClick = { advanced = !advanced }) {
-        Text(if (advanced) "Ocultar servidor" else "Servidor: ${vm.serverUrl.removePrefix("https://")}")
-    }
-    if (advanced) {
-        Field(server, { server = it; vm.serverUrl = it }, "URL del servidor (Render)", keyboard = KeyboardType.Uri)
-    }
-    Spacer(Modifier.height(12.dp))
     if (busy) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             CircularProgressIndicator(Modifier.size(22.dp), strokeWidth = 2.dp)
             Spacer(Modifier.size(12.dp))
             Text("Conectando… (si el servidor estaba dormido puede tardar un minuto)", style = MaterialTheme.typography.bodySmall)
         }
-    } else {
+        return
+    }
+
+    if (googleReady && activity != null) {
+        PillButton(
+            "Continuar con Google", Icons.Default.AccountCircle,
+            onClick = {
+                scope.launch {
+                    when (val result = GoogleSignIn.idToken(activity)) {
+                        is GoogleSignIn.Result.Token -> vm.googleLogin(result.idToken)
+                        is GoogleSignIn.Result.Error -> vm.showMessage(result.message)
+                        GoogleSignIn.Result.Cancelled -> Unit
+                    }
+                }
+            },
+            modifier = Modifier.fillMaxWidth(),
+        )
+        TextButton(onClick = { withPassword = !withPassword }) {
+            Text(if (withPassword) "Ocultar usuario y contraseña" else "Usar usuario y contraseña")
+        }
+    }
+
+    if (withPassword) {
+        SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
+            listOf("Iniciar sesión", "Crear cuenta").forEachIndexed { i, label ->
+                SegmentedButton(
+                    selected = registering == (i == 1),
+                    onClick = { registering = i == 1 },
+                    shape = SegmentedButtonDefaults.itemShape(i, 2, style.cardShape),
+                    icon = {},
+                ) { Text(style.label(label)) }
+            }
+        }
+        Spacer(Modifier.height(16.dp))
+        Field(username, { username = it }, "Usuario")
+        if (registering) Field(displayName, { displayName = it }, "Tu nombre (lo verá tu pareja)")
+        Field(password, { password = it }, "Contraseña", password = true)
+        if (registering) Field(invite, { invite = it }, "Código de invitación")
+        Spacer(Modifier.height(12.dp))
         PillButton(
             if (registering) "Crear cuenta" else "Entrar", Icons.Default.Cloud,
             onClick = {
                 if (registering) vm.register(username, password, displayName, invite) else vm.login(username, password)
             },
             modifier = Modifier.fillMaxWidth(),
+            primary = !googleReady,
         )
+    }
+
+    TextButton(onClick = { advanced = !advanced }) {
+        Text(if (advanced) "Ocultar servidor" else "Servidor: ${vm.serverUrl.removePrefix("https://")}")
+    }
+    if (advanced) {
+        Field(server, { server = it; vm.serverUrl = it }, "URL del servidor (Render)", keyboard = KeyboardType.Uri)
     }
 }
 
