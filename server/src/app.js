@@ -13,16 +13,13 @@ const EMOJIS = new Set(['❤️', '😍', '🔥', '😘', '💃', '🎶']);
 export function createApp(db, config, realtime, services = {}) {
   const push = services.push ?? { send: async () => 0 };
   const verifyGoogle = services.verifyGoogle ?? null;
-  const streamer = services.streamer ?? null;
   const allowed = new Set((config.allowedEmails ?? []).map((e) => e.toLowerCase()));
   const app = express();
   app.disable('x-powered-by');
   app.use(express.json({ limit: '3mb' }));
 
   const auth = requireAuth(db, config);
-  const audioAuth = requireAuth(db, config, { allowQuery: true });
   const loginLimiter = rateLimiter(config.loginLimitPerMinute ?? 10, 60_000);
-  const diagnoseLimiter = rateLimiter(config.diagnoseLimitPerMinute ?? 3, 60_000);
 
   app.get('/', (_req, res) => res.json({ app: 'minu', ok: true }));
   app.get('/health', (_req, res) => res.json({ ok: true }));
@@ -255,29 +252,6 @@ export function createApp(db, config, realtime, services = {}) {
     const other = d.from.equals(req.user._id) ? d.to : d.from;
     realtime.notify(other, { type: 'dedication.update', dedication: serializeDedication(d, other) });
     res.json({ dedication: serializeDedication(d, req.user._id) });
-  });
-
-  // ---------- Audio sin anuncios (EXPERIMENTAL) ----------
-
-  // Diagnóstico público: ¿YouTube entrega audio a este servidor? Solo canciones fijas y sin reenviar audio.
-  let lastDiagnosis = null;
-  app.get('/stream/test', diagnoseLimiter, async (_req, res) => {
-    if (!streamer) return fail(res, 503, 'El streaming no está activado.');
-    if (!lastDiagnosis || Date.now() - lastDiagnosis.at > 60_000) {
-      lastDiagnosis = { at: Date.now(), result: await streamer.diagnose() };
-    }
-    res.json({ ...lastDiagnosis.result, checkedAt: new Date(lastDiagnosis.at).toISOString() });
-  });
-
-  // Audio de una canción. Acepta ?token= para usarlo directo en <audio src>.
-  app.get('/stream/:videoId', audioAuth, async (req, res) => {
-    if (!streamer) return fail(res, 503, 'El streaming no está activado.');
-    if (!/^[A-Za-z0-9_-]{11}$/.test(req.params.videoId)) return fail(res, 400, 'Canción inválida.');
-    try {
-      await streamer.proxy(req, res, req.params.videoId);
-    } catch (e) {
-      if (!res.headersSent) fail(res, 502, `No se pudo obtener el audio: ${String(e.message).slice(0, 300)}`);
-    }
   });
 
   app.use((err, _req, res, _next) => {
