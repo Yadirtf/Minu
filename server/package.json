@@ -19,7 +19,8 @@
     "google-auth-library": "^11.3.1",
     "jsonwebtoken": "^9.0.3",
     "mongodb": "^7.7.0",
-    "ws": "^8.22.0"
+    "ws": "^8.22.0",
+    "youtubei.js": "^18.3.0"
   },
   "devDependencies": {
     "mongodb-memory-server": "^11.3.0"

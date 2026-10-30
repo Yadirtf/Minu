@@ -4,6 +4,7 @@ import { createApp } from './app.js';
 import { attachRealtime } from './realtime.js';
 import { ensureIndexes } from './db.js';
 import { createGoogleVerifier, createPush } from './services.js';
+import { createStreamer } from './stream.js';
 
 const required = ['MONGODB_URI', 'JWT_SECRET'];
 const missing = required.filter((k) => !process.env[k]);
@@ -33,6 +34,8 @@ await ensureIndexes(db);
 const services = {
   verifyGoogle: createGoogleVerifier(list(process.env.GOOGLE_CLIENT_IDS)),
   push: createPush(db, process.env.FIREBASE_SERVICE_ACCOUNT),
+  // Experimento de audio sin anuncios; STREAMING=off lo apaga
+  streamer: process.env.STREAMING === 'off' ? null : createStreamer(),
 };
 console.log(
   `Google: ${services.verifyGoogle ? 'activado' : 'desactivado'} · ` +
