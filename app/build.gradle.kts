@@ -10,6 +10,21 @@ plugins {
 val hasFirebase = file("google-services.json").exists()
 if (hasFirebase) apply(plugin = "com.google.gms.google-services")
 
+// "ID de cliente web" para "Continuar con Google": gradle.properties (minu.googleWebClientId) o, si está vacío,
+// el cliente web (client_type 3) que trae google-services.json. Así la APK de GitHub Actions no lo pierde.
+@Suppress("UNCHECKED_CAST")
+fun webClientIdFromFirebase(): String {
+    if (!hasFirebase) return ""
+    val json = groovy.json.JsonSlurper().parse(file("google-services.json")) as Map<String, Any?>
+    val clients = json["client"] as? List<Map<String, Any?>> ?: return ""
+    return clients.asSequence()
+        .flatMap { (it["oauth_client"] as? List<Map<String, Any?>>).orEmpty() }
+        .firstOrNull { it["client_type"]?.toString() == "3" }
+        ?.get("client_id")?.toString().orEmpty()
+}
+val googleWebClientId = providers.gradleProperty("minu.googleWebClientId").orNull?.takeIf { it.isNotBlank() }
+    ?: webClientIdFromFirebase()
+
 // Firma: los datos están en keystore.properties (fuera de git). Guarda una copia de ese archivo y del .jks.
 val keystoreProps = Properties().apply {
     val file = rootProject.file("keystore.properties")
@@ -33,8 +48,8 @@ android {
         versionName = providers.gradleProperty("minu.versionName").getOrElse("1.0")
         // URL del servidor en Render: se cambia en gradle.properties (minu.serverUrl)
         buildConfigField("String", "SERVER_URL", "\"${providers.gradleProperty("minu.serverUrl").getOrElse("")}\"")
-        // "ID de cliente web" de Google para "Continuar con Google" (gradle.properties: minu.googleWebClientId)
-        buildConfigField("String", "GOOGLE_WEB_CLIENT_ID", "\"${providers.gradleProperty("minu.googleWebClientId").getOrElse("")}\"")
+        // Sin este ID el botón "Continuar con Google" no aparece (ver googleWebClientId arriba)
+        buildConfigField("String", "GOOGLE_WEB_CLIENT_ID", "\"$googleWebClientId\"")
         buildConfigField("boolean", "HAS_FIREBASE", hasFirebase.toString())
         buildConfigField("String", "NEWPIPE_VERSION", "\"${libs.versions.newpipeExtractor.get()}\"")
     }

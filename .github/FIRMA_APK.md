@@ -75,7 +75,7 @@ En GitHub: repo **Minu → Settings → Secrets and variables → Actions → Ne
 | `KEY_ALIAS` | `keyAlias` de `keystore.properties` |
 | `KEY_PASSWORD` | `keyPassword` de `keystore.properties` |
 | `GOOGLE_SERVICES_JSON_BASE64` | base64 de `google-services.json` (recomendado) |
-| `GOOGLE_WEB_CLIENT_ID` | opcional: "ID de cliente web" para "Continuar con Google" si no lo pusiste en `gradle.properties` |
+| `GOOGLE_WEB_CLIENT_ID` | "ID de cliente web" para "Continuar con Google". Opcional si tu `google-services.json` ya lo trae (la app lo toma de ahí); si el workflow avisa que falta, agrégalo. Está en Firebase → Authentication → Método de acceso → Google → Configuración del SDK web, termina en `.apps.googleusercontent.com` |
 
 Los nombres deben ser exactos (mayúsculas incluidas). GitHub nunca vuelve a mostrar un secret; si te equivocas, lo reemplazas.
 
