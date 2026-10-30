@@ -170,6 +170,12 @@ test('pareja, dedicatorias y tiempo real', async () => {
   // Reacción en vivo y ping
   wsNovia.send(JSON.stringify({ type: 'reaction', emoji: '🔥' }));
   assert.equal((await wsDaniel.waitFor('reaction')).emoji, '🔥');
+
+  // A quien escucha le gustó la canción y la guardó: el DJ recibe el título
+  wsNovia.send(JSON.stringify({ type: 'listen.saved', title: 'Never Gonna Give You Up' }));
+  const saved = await wsDaniel.waitFor('listen.saved');
+  assert.equal(saved.title, 'Never Gonna Give You Up');
+  assert.equal(saved.from, 'novia');
   wsNovia.send(JSON.stringify({ type: 'ping', t: 1 }));
   assert.equal((await wsNovia.waitFor('pong')).t, 1);
 

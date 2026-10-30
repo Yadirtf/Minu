@@ -1,6 +1,7 @@
 package com.daniel.reproductor.ui.library
 
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -13,6 +14,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.PlaylistAdd
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.DownloadForOffline
@@ -39,12 +41,17 @@ import com.daniel.reproductor.ui.components.ArtworkImage
 import com.daniel.reproductor.ui.components.MenuAction
 import com.daniel.reproductor.ui.theme.LocalAppStyle
 
-/** Hoja inferior "¿A qué playlist la agrego?". */
+/**
+ * Hoja inferior "¿A qué playlist la agrego?". Marca con ✓ las playlists donde ya está la canción.
+ * [onSaved] avisa solo cuando la canción quedó en una playlist nueva para ella.
+ */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun PlaylistPickerSheet(song: Song, lib: LibraryViewModel, onDismiss: () -> Unit) {
+fun PlaylistPickerSheet(song: Song, lib: LibraryViewModel, onDismiss: () -> Unit, onSaved: (Song) -> Unit = {}) {
     val playlists by lib.playlists.collectAsStateWithLifecycle()
     val covers by lib.covers.collectAsStateWithLifecycle()
+    val containing by remember(song.videoId) { lib.playlistsContaining(song.videoId) }
+        .collectAsStateWithLifecycle(emptySet())
     var creating by remember { mutableStateOf(false) }
     val style = LocalAppStyle.current
 
@@ -52,7 +59,7 @@ fun PlaylistPickerSheet(song: Song, lib: LibraryViewModel, onDismiss: () -> Unit
         TextInputDialog(
             title = "Nueva playlist", label = "Nombre", confirmText = "Crear y agregar",
             onDismiss = { creating = false },
-            onConfirm = { lib.createPlaylistAndAdd(it, song); creating = false; onDismiss() },
+            onConfirm = { lib.createPlaylistAndAdd(it, song); onSaved(song); creating = false; onDismiss() },
         )
         return
     }
@@ -69,7 +76,8 @@ fun PlaylistPickerSheet(song: Song, lib: LibraryViewModel, onDismiss: () -> Unit
             modifier = Modifier.padding(horizontal = 24.dp),
         )
         Text(
-            song.title, maxLines = 1, overflow = TextOverflow.Ellipsis,
+            listOf(song.title, song.uploader).filter { it.isNotBlank() }.joinToString(" · "),
+            maxLines = 1, overflow = TextOverflow.Ellipsis,
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.padding(horizontal = 24.dp, vertical = 4.dp),
@@ -83,16 +91,30 @@ fun PlaylistPickerSheet(song: Song, lib: LibraryViewModel, onDismiss: () -> Unit
                 }
             }
             items(playlists, key = { it.playlist.id }) { item ->
-                PickerRow(onClick = { lib.addToPlaylist(song, item.playlist); onDismiss() }) {
+                val added = item.playlist.id in containing
+                PickerRow(onClick = {
+                    lib.addToPlaylist(song, item.playlist)
+                    if (!added) onSaved(song)
+                    onDismiss()
+                }) {
                     ArtworkImage(covers[item.playlist.id]?.firstOrNull()?.let(lib::thumbnail), Modifier.size(48.dp))
                     Spacer(Modifier.width(16.dp))
-                    Text(item.playlist.name, style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
-                    Text("${item.songCount}", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Column(Modifier.weight(1f)) {
+                        Text(item.playlist.name, style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        Text(
+                            if (added) "Ya está aquí · ${item.songCount}" else songCountLabel(item.songCount),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = if (added) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                    if (added) Icon(Icons.Default.CheckCircle, "Ya está en esta playlist", tint = MaterialTheme.colorScheme.primary)
                 }
             }
         }
     }
 }
+
+private fun songCountLabel(count: Int) = if (count == 1) "1 canción" else "$count canciones"
 
 @Composable
 private fun PickerRow(onClick: () -> Unit, content: @Composable androidx.compose.foundation.layout.RowScope.() -> Unit) {

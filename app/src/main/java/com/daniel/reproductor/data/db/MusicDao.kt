@@ -72,6 +72,10 @@ interface MusicDao {
     )
     fun observePlaylistSongs(): Flow<List<PlaylistSongRow>>
 
+    /** Playlists en las que ya está la canción. */
+    @Query("SELECT playlistId FROM PlaylistSong WHERE videoId = :videoId")
+    fun observePlaylistIdsFor(videoId: String): Flow<List<Long>>
+
     @Query("DELETE FROM PlaylistSong WHERE videoId = :videoId")
     suspend fun removeFromAllPlaylists(videoId: String)
 

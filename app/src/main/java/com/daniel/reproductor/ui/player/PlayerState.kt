@@ -89,6 +89,9 @@ class PlayerState(val player: Player, private val files: MusicFiles) {
 
     fun clearError() { error = null }
 
+    /** La canción que suena ahora, lista para guardarla en una playlist. */
+    fun currentSong(): Song? = player.currentMediaItem?.let { PlaybackItems.toSong(it, durationMs) }
+
     /** Si devuelve un mensaje, este celular no controla la música (sigue al de la pareja). */
     var lockedReason: () -> String? = { null }
     var onLocked: (String) -> Unit = {}

@@ -29,9 +29,12 @@ import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
@@ -83,12 +86,18 @@ import coil3.compose.AsyncImage
 import com.daniel.reproductor.ui.common.formatDuration
 import com.daniel.reproductor.ui.components.ArtworkImage
 import com.daniel.reproductor.ui.components.glow
+import com.daniel.reproductor.ui.library.SaveAction
+import com.daniel.reproductor.ui.library.SaveToPlaylistButton
+import com.daniel.reproductor.ui.library.saveLabel
 import com.daniel.reproductor.ui.theme.LocalAppStyle
 import com.daniel.reproductor.ui.theme.StyleId
 
-/** Reproductor a pantalla completa: cada estilo tiene su propio diseño. Deslizar hacia abajo lo cierra. */
+/**
+ * Reproductor a pantalla completa: cada estilo tiene su propio diseño. Deslizar hacia abajo lo cierra.
+ * [save] agrega la canción que suena a una playlist (útil sobre todo con lo que viene de YouTube).
+ */
 @Composable
-fun FullPlayerScreen(state: PlayerState, onClose: () -> Unit) {
+fun FullPlayerScreen(state: PlayerState, onClose: () -> Unit, save: SaveAction) {
     val style = LocalAppStyle.current
     val closeOnSwipe = Modifier.pointerInput(Unit) {
         var total = 0f
@@ -99,12 +108,12 @@ fun FullPlayerScreen(state: PlayerState, onClose: () -> Unit) {
     }
     Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background).then(closeOnSwipe)) {
         when (style.id) {
-            StyleId.NEON -> NeonPlayer(state, onClose)
-            StyleId.VINYL -> VinylPlayer(state, onClose)
-            StyleId.AURORA -> AuroraPlayer(state, onClose)
-            StyleId.TERMINAL -> TerminalPlayer(state, onClose)
-            StyleId.BRUTAL -> BrutalPlayer(state, onClose)
-            StyleId.MATERIAL -> MaterialPlayer(state, onClose)
+            StyleId.NEON -> NeonPlayer(state, onClose, save)
+            StyleId.VINYL -> VinylPlayer(state, onClose, save)
+            StyleId.AURORA -> AuroraPlayer(state, onClose, save)
+            StyleId.TERMINAL -> TerminalPlayer(state, onClose, save)
+            StyleId.BRUTAL -> BrutalPlayer(state, onClose, save)
+            StyleId.MATERIAL -> MaterialPlayer(state, onClose, save)
         }
     }
 }
@@ -116,14 +125,14 @@ private val PlayerState.artist get() = metadata.artist?.toString().orEmpty()
 private val PlayerState.queueLabel get() = if (itemCount > 0) "${currentIndex + 1} / $itemCount" else ""
 
 @Composable
-private fun TopBar(onClose: () -> Unit, label: String, tint: Color = MaterialTheme.colorScheme.onBackground) {
+private fun TopBar(onClose: () -> Unit, label: String, save: SaveAction, tint: Color = MaterialTheme.colorScheme.onBackground) {
     Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp), verticalAlignment = Alignment.CenterVertically) {
         IconButton(onClick = onClose) { Icon(Icons.Default.KeyboardArrowDown, "Cerrar", tint = tint, modifier = Modifier.size(32.dp)) }
         Text(
             label, modifier = Modifier.weight(1f), textAlign = TextAlign.Center,
             style = MaterialTheme.typography.labelMedium.copy(letterSpacing = 0.2.em), color = tint.copy(alpha = 0.7f),
         )
-        Spacer(Modifier.size(48.dp))
+        SaveToPlaylistButton(save, tint)
     }
 }
 
@@ -179,7 +188,7 @@ private fun rememberSpin(playing: Boolean, secondsPerTurn: Int = 8): Float {
 // ---------- NEÓN (inspirado en Poweramp) ----------
 
 @Composable
-private fun NeonPlayer(state: PlayerState, onClose: () -> Unit) {
+private fun NeonPlayer(state: PlayerState, onClose: () -> Unit, save: SaveAction) {
     val c = MaterialTheme.colorScheme
     val pulse by rememberInfiniteTransition(label = "pulse").animateFloat(
         0.35f, 0.65f, infiniteRepeatable(tween(1600), RepeatMode.Reverse), label = "glow",
@@ -200,7 +209,7 @@ private fun NeonPlayer(state: PlayerState, onClose: () -> Unit) {
             Modifier.fillMaxSize().statusBarsPadding().navigationBarsPadding().padding(horizontal = 24.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
-            TopBar(onClose, "REPRODUCIENDO · ${state.queueLabel}")
+            TopBar(onClose, "REPRODUCIENDO · ${state.queueLabel}", save)
             Spacer(Modifier.weight(0.6f))
             Box(Modifier.fillMaxWidth(0.86f).aspectRatio(1f), contentAlignment = Alignment.Center) {
                 Box(Modifier.fillMaxSize(0.9f).glow(c.primary, 40.dp, alpha = if (state.isPlaying) pulse else 0.25f))
@@ -243,7 +252,7 @@ private fun NeonPlayer(state: PlayerState, onClose: () -> Unit) {
 // ---------- VINILO ----------
 
 @Composable
-private fun VinylPlayer(state: PlayerState, onClose: () -> Unit) {
+private fun VinylPlayer(state: PlayerState, onClose: () -> Unit, save: SaveAction) {
     val c = MaterialTheme.colorScheme
     val spin = rememberSpin(state.isPlaying, secondsPerTurn = 4)
     val armAngle by animateFloatAsState(if (state.isPlaying) 0f else -16f, tween(700), label = "arm")
@@ -253,7 +262,7 @@ private fun VinylPlayer(state: PlayerState, onClose: () -> Unit) {
             .statusBarsPadding().navigationBarsPadding().padding(horizontal = 28.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-        TopBar(onClose, "— lado A · ${state.queueLabel} —")
+        TopBar(onClose, "— lado A · ${state.queueLabel} —", save)
         Spacer(Modifier.weight(0.5f))
         Box(Modifier.fillMaxWidth().aspectRatio(1f)) {
             VinylDisc(state.metadata.artworkUri, spin, Modifier.fillMaxSize(0.92f).align(Alignment.CenterStart))
@@ -335,7 +344,7 @@ fun VinylDisc(art: Any?, rotation: Float, modifier: Modifier) {
 // ---------- AURORA ----------
 
 @Composable
-private fun AuroraPlayer(state: PlayerState, onClose: () -> Unit) {
+private fun AuroraPlayer(state: PlayerState, onClose: () -> Unit, save: SaveAction) {
     val c = MaterialTheme.colorScheme
     val t by rememberInfiniteTransition(label = "aurora").animateFloat(
         0f, 1f, infiniteRepeatable(tween(12000, easing = LinearEasing), RepeatMode.Reverse), label = "t",
@@ -358,7 +367,7 @@ private fun AuroraPlayer(state: PlayerState, onClose: () -> Unit) {
             Modifier.fillMaxSize().statusBarsPadding().navigationBarsPadding().padding(horizontal = 22.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
-            TopBar(onClose, "Reproduciendo · ${state.queueLabel}", Color.White)
+            TopBar(onClose, "Reproduciendo · ${state.queueLabel}", save, Color.White)
             Spacer(Modifier.weight(0.5f))
             ArtworkImage(
                 state.metadata.artworkUri,
@@ -413,7 +422,7 @@ private val greenPhosphor = ColorFilter.colorMatrix(
 )
 
 @Composable
-private fun TerminalPlayer(state: PlayerState, onClose: () -> Unit) {
+private fun TerminalPlayer(state: PlayerState, onClose: () -> Unit, save: SaveAction) {
     val c = MaterialTheme.colorScheme
     val cursor by rememberInfiniteTransition(label = "cursor").animateFloat(
         0f, 1f, infiniteRepeatable(tween(1000, easing = LinearEasing)), label = "blink",
@@ -466,6 +475,7 @@ private fun TerminalPlayer(state: PlayerState, onClose: () -> Unit) {
             Spacer(Modifier.height(10.dp))
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                 TerminalButton("SHUF:" + if (state.shuffle) "ON " else "OFF", state::toggleShuffle, small = true)
+                TerminalButton(if (save.saved) "SAVED" else "+LIST", save.onClick, small = true)
                 TerminalButton(
                     "REP:" + when (state.repeatMode) { Player.REPEAT_MODE_ONE -> "ONE"; Player.REPEAT_MODE_ALL -> "ALL"; else -> "OFF" },
                     state::cycleRepeat, small = true,
@@ -526,7 +536,7 @@ fun Scanlines() {
 // ---------- BRUTAL ----------
 
 @Composable
-private fun BrutalPlayer(state: PlayerState, onClose: () -> Unit) {
+private fun BrutalPlayer(state: PlayerState, onClose: () -> Unit, save: SaveAction) {
     val c = MaterialTheme.colorScheme
     Column(
         Modifier.fillMaxSize().statusBarsPadding().navigationBarsPadding().padding(horizontal = 20.dp),
@@ -540,6 +550,11 @@ private fun BrutalPlayer(state: PlayerState, onClose: () -> Unit) {
             Text(
                 if (state.itemCount > 0) "%02d/%02d".format(state.currentIndex + 1, state.itemCount) else "",
                 style = MaterialTheme.typography.headlineMedium, color = c.primary,
+            )
+            Spacer(Modifier.width(12.dp))
+            BrutalSquare(
+                if (save.saved) Icons.Default.Check else Icons.Default.Add, saveLabel(save.saved), save.onClick,
+                active = save.saved, size = 44.dp,
             )
         }
         Spacer(Modifier.height(16.dp))
@@ -596,7 +611,7 @@ private fun BrutalSquare(icon: ImageVector, description: String, onClick: () -> 
 // ---------- MATERIAL YOU ----------
 
 @Composable
-private fun MaterialPlayer(state: PlayerState, onClose: () -> Unit) {
+private fun MaterialPlayer(state: PlayerState, onClose: () -> Unit, save: SaveAction) {
     val c = MaterialTheme.colorScheme
     Column(
         Modifier.fillMaxSize()
@@ -604,7 +619,7 @@ private fun MaterialPlayer(state: PlayerState, onClose: () -> Unit) {
             .statusBarsPadding().navigationBarsPadding().padding(horizontal = 24.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-        TopBar(onClose, "Reproduciendo · ${state.queueLabel}")
+        TopBar(onClose, "Reproduciendo · ${state.queueLabel}", save)
         Spacer(Modifier.weight(0.5f))
         ArtworkImage(state.metadata.artworkUri, Modifier.fillMaxWidth().aspectRatio(1f), RoundedCornerShape(28.dp))
         Spacer(Modifier.weight(0.5f))

@@ -114,6 +114,7 @@ class TogetherViewModel(
     fun play(dedication: Dedication) = hub.playDedication(dedication)
     fun markSeen(dedication: Dedication) = hub.markSeen(dedication)
     fun sendLiveReaction(emoji: String) = hub.sendLiveReaction(emoji)
+    fun onSongSaved(song: Song) = hub.notifySaved(song)
 
     fun inviteListen() = hub.inviteListen()
     fun acceptListen() = hub.acceptListen()

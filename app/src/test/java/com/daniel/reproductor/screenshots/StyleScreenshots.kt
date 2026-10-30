@@ -27,6 +27,7 @@ import com.daniel.reproductor.data.db.DownloadState
 import com.daniel.reproductor.data.db.Playlist
 import com.daniel.reproductor.data.db.Song
 import com.daniel.reproductor.ui.library.LibraryViewModel
+import com.daniel.reproductor.ui.library.SaveAction
 import com.daniel.reproductor.ui.player.FullPlayerScreen
 import com.daniel.reproductor.ui.player.PlayerState
 import com.daniel.reproductor.ui.playlists.PlaylistsScreen
@@ -123,7 +124,7 @@ class StyleScreenshots {
         compose.setContent {
             ReproductorTheme(AppStyles.byId(style), artworkColor = androidx.compose.ui.graphics.Color(0xFFE53935).takeIf { style == StyleId.AURORA }) {
                 when (screen) {
-                    "player" -> FullPlayerScreen(player, onClose = {})
+                    "player" -> FullPlayerScreen(player, onClose = {}, save = SaveAction(saved = false) {})
                     "playlists" -> androidx.compose.foundation.layout.Box(androidx.compose.ui.Modifier.background(androidx.compose.material3.MaterialTheme.colorScheme.background)) {
                         PlaylistsScreen(lib, onOpenPlaylist = {})
                     }
