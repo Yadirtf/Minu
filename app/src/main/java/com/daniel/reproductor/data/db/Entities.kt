@@ -51,6 +51,13 @@ data class PlaylistSongRow(
     @Embedded val song: Song,
 )
 
+/** Una canción dentro de una playlist, en el orden en que se agregó. */
+data class Membership(
+    val videoId: String,
+    val playlistId: Long,
+    val playlistName: String,
+)
+
 data class PlaylistWithCount(
     @Embedded val playlist: Playlist,
     val songCount: Int,

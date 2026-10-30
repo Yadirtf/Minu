@@ -9,30 +9,61 @@ import androidx.lifecycle.viewmodel.viewModelFactory
 import com.daniel.reproductor.data.AppSettings
 import com.daniel.reproductor.data.MusicRepository
 import com.daniel.reproductor.data.UserFacingException
+import com.daniel.reproductor.data.download.DownloadStorage
 import com.daniel.reproductor.data.remote.ExtractorUpdateChecker
 import com.daniel.reproductor.ui.common.app
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.mapLatest
 import kotlinx.coroutines.flow.receiveAsFlow
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 
-/** Ajustes: Wi-Fi, respaldo JSON y aviso de versión nueva del extractor. */
+/** Ajustes: Wi-Fi, carpeta de descargas, respaldo JSON y aviso de versión nueva del extractor. */
+@OptIn(ExperimentalCoroutinesApi::class)
 class SettingsViewModel(
     private val repo: MusicRepository,
     private val settings: AppSettings,
+    private val downloads: DownloadStorage,
     private val updateChecker: ExtractorUpdateChecker,
     private val contentResolver: ContentResolver,
 ) : ViewModel() {
 
     val wifiOnly: StateFlow<Boolean> = settings.wifiOnly
     fun setWifiOnly(value: Boolean) = settings.setWifiOnly(value)
+
+    /** Carpeta elegida en texto legible ("Memoria interna › Music › Minu"), o null si es la memoria de la app. */
+    val downloadFolder: StateFlow<String?> = settings.downloadTree
+        .mapLatest { downloads.describeLocation() }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
+
+    /** Avance mientras se mueven las descargas a su carpeta. */
+    val organizing: StateFlow<DownloadStorage.Progress?> = downloads.observeProgress()
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
+
+    fun chooseDownloadFolder(tree: Uri) = viewModelScope.launch {
+        val msg = try {
+            downloads.useFolder(tree)
+            "Las descargas se guardarán en una carpeta por playlist"
+        } catch (e: SecurityException) {
+            "Android no permitió usar esa carpeta. Elige otra."
+        }
+        _messages.send(msg)
+    }
+
+    fun useAppStorage() = viewModelScope.launch {
+        downloads.useAppStorage()
+        _messages.send("Las descargas vuelven a la memoria de la app")
+    }
 
     private val _messages = Channel<String>(Channel.BUFFERED)
     val messages = _messages.receiveAsFlow()
@@ -84,7 +115,7 @@ class SettingsViewModel(
     companion object {
         val Factory = viewModelFactory {
             initializer {
-                SettingsViewModel(app.repository, app.settings, app.updateChecker, app.contentResolver)
+                SettingsViewModel(app.repository, app.settings, app.downloads, app.updateChecker, app.contentResolver)
             }
         }
 
