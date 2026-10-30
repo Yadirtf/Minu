@@ -75,6 +75,7 @@ import com.daniel.reproductor.ui.profile.ProfileEntry
 import com.daniel.reproductor.ui.profile.ProfileSummary
 import com.daniel.reproductor.ui.resolver.ResolverScreen
 import com.daniel.reproductor.ui.search.SearchScreen
+import com.daniel.reproductor.ui.search.SearchViewModel
 import com.daniel.reproductor.ui.settings.SettingsSheet
 import com.daniel.reproductor.ui.settings.SettingsViewModel
 import com.daniel.reproductor.ui.styles.StylePickerScreen
@@ -157,6 +158,8 @@ internal fun AppRoot(
     settings: SettingsViewModel,
     player: PlayerState?,
     together: TogetherViewModel = viewModel(factory = TogetherViewModel.Factory),
+    // La misma instancia que usa la pestaña Buscar, para mandarle una búsqueda desde Inicio
+    search: SearchViewModel = viewModel(key = "search-null", factory = SearchViewModel.Factory),
 ) {
     val app = LocalContext.current.applicationContext as ReproductorApp
     val hub = app.partnerHub
@@ -271,9 +274,13 @@ internal fun AppRoot(
                             else -> CompositionLocalProvider(LocalProfileEntry provides profileEntry) {
                                 HorizontalPager(pager, key = { Tab.entries[it].name }) { page ->
                                     when (Tab.entries[page]) {
-                                        Tab.HOME -> HomeScreen(lib = lib, settings = settings, player = player)
+                                        Tab.HOME -> HomeScreen(
+                                            lib = lib, settings = settings, player = player,
+                                            onOpenPlaylist = { openPlaylist = it },
+                                            onSearchOnline = { q -> search.setQuery(q); goTo(Tab.SEARCH) },
+                                        )
                                         Tab.PLAYLISTS -> PlaylistsScreen(lib, onOpenPlaylist = { openPlaylist = it })
-                                        Tab.SEARCH -> SearchScreen(lib = lib, player = player)
+                                        Tab.SEARCH -> SearchScreen(lib = lib, player = player, vm = search)
                                         Tab.TOGETHER -> TogetherScreen(together, lib, player, onOpenAccount = { showAccount = true })
                                     }
                                 }

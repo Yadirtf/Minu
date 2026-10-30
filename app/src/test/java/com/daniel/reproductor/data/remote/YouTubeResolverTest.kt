@@ -27,8 +27,8 @@ class YouTubeSearchTest {
     fun searchesVideosAndMusic() = runBlocking {
         NewPipe.init(OkHttpDownloader(OkHttpClient()))
         val resolver = YouTubeResolver()
-        val videos = resolver.search("queen bohemian rhapsody", musicOnly = false)
-        val songs = resolver.search("queen bohemian rhapsody", musicOnly = true)
+        val videos = resolver.search("queen bohemian rhapsody", SongSource.YOUTUBE)
+        val songs = resolver.search("queen bohemian rhapsody", SongSource.MUSIC)
         println("Videos: ${videos.size}, primero: ${videos.firstOrNull()?.title}")
         println("YT Music: ${songs.size}, primero: ${songs.firstOrNull()?.title} (${songs.firstOrNull()?.durationSec}s)")
         assertTrue(videos.isNotEmpty())

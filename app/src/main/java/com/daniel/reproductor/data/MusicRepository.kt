@@ -4,6 +4,7 @@ import com.daniel.reproductor.data.db.MusicDao
 import com.daniel.reproductor.data.db.Playlist
 import com.daniel.reproductor.data.db.PlaylistWithCount
 import com.daniel.reproductor.data.db.Song
+import com.daniel.reproductor.data.remote.SongSource
 import com.daniel.reproductor.data.remote.YouTubeResolver
 import androidx.work.BackoffPolicy
 import androidx.work.Constraints
@@ -160,8 +161,8 @@ class MusicRepository(
         else AddResult.AlreadyInPlaylist(stored)
     }
 
-    suspend fun search(query: String, musicOnly: Boolean): List<Song> = try {
-        resolver.search(query, musicOnly)
+    suspend fun search(query: String, source: SongSource): List<Song> = try {
+        resolver.search(query, source)
     } catch (e: Exception) {
         throw UserFacingException(YouTubeResolver.describeError(e), e)
     }

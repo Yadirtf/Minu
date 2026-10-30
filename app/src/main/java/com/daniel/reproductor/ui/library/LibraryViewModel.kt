@@ -65,11 +65,16 @@ class LibraryViewModel(
     val sort = MutableStateFlow(SortMode.RECENT)
     val onlyDownloaded = MutableStateFlow(false)
 
-    /** Canciones de Inicio: ordenadas, filtradas y sin conexión solo las descargadas. */
+    /** Texto de la barra de Inicio: busca solo en lo guardado, nunca en YouTube. */
+    val libraryQuery = MutableStateFlow("")
+
+    /** Canciones de Inicio: ordenadas, filtradas por la búsqueda y sin conexión solo las descargadas. */
     val homeSongs: StateFlow<List<Song>?> =
-        combine(allSongs, sort, onlyDownloaded, isOnline) { songs, sort, onlyDone, online ->
+        combine(allSongs, sort, onlyDownloaded, isOnline, libraryQuery) { songs, sort, onlyDone, online, query ->
             songs?.let { list ->
-                val filtered = if (onlyDone || !online) list.filter { it.downloadState == DownloadState.DONE } else list
+                val q = query.normalized()
+                val matching = if (q.isEmpty()) list else list.filter { it.matches(q) }
+                val filtered = if (onlyDone || !online) matching.filter { it.downloadState == DownloadState.DONE } else matching
                 when (sort) {
                     SortMode.RECENT -> filtered
                     SortMode.TITLE -> filtered.sortedBy { it.title.lowercase() }
@@ -78,6 +83,13 @@ class LibraryViewModel(
                 }
             }
         }.stateIn(viewModelScope, SharingStarted.Eagerly, null)
+
+    /** Playlists cuyo nombre coincide con la búsqueda de Inicio. */
+    val matchingPlaylists: StateFlow<List<PlaylistWithCount>> =
+        combine(playlists, libraryQuery) { all, query ->
+            val q = query.normalized()
+            if (q.isEmpty()) emptyList() else all.filter { q in it.playlist.name.normalized() }
+        }.stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
 
     private val _messages = Channel<String>(Channel.BUFFERED)
     val messages = _messages.receiveAsFlow()
@@ -88,7 +100,7 @@ class LibraryViewModel(
     fun searchLocal(query: String): List<Song> {
         val q = query.normalized()
         if (q.isBlank()) return emptyList()
-        return allSongs.value.orEmpty().filter { q in it.title.normalized() || q in it.uploader.normalized() }
+        return allSongs.value.orEmpty().filter { it.matches(q) }
     }
 
     fun addToPlaylist(song: Song, playlist: Playlist) = viewModelScope.launch {
@@ -129,6 +141,9 @@ class LibraryViewModel(
         }
     }
 }
+
+private fun Song.matches(normalizedQuery: String) =
+    normalizedQuery in title.normalized() || normalizedQuery in uploader.normalized()
 
 private fun String.normalized(): String =
     Normalizer.normalize(lowercase(), Normalizer.Form.NFD).replace(Regex("\\p{M}+"), "").trim()

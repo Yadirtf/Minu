@@ -213,6 +213,7 @@ fun SongRow(
     modifier: Modifier = Modifier,
     downloadProgress: Int? = null,
     actions: List<MenuAction> = emptyList(),
+    tag: String? = null,
     trailing: (@Composable () -> Unit)? = null,
 ) {
     val style = LocalAppStyle.current
@@ -243,6 +244,7 @@ fun SongRow(
                 )
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     DownloadBadge(song.downloadState, downloadProgress)
+                    tag?.let { SmallTag(it, Modifier.padding(end = 6.dp)) }
                     Text(
                         "${song.uploader} · ${formatDuration(song.durationSec)}",
                         style = MaterialTheme.typography.bodySmall,
@@ -276,6 +278,26 @@ fun SongRow(
             )
         }
     }
+}
+
+/** Etiqueta discreta junto al artista, como la "E" de Spotify: de dónde viene la canción o si es sugerida. */
+@Composable
+fun SmallTag(text: String, modifier: Modifier = Modifier) {
+    val style = LocalAppStyle.current
+    val colors = MaterialTheme.colorScheme
+    val shape = when (style.id) {
+        StyleId.BRUTAL, StyleId.TERMINAL -> RoundedCornerShape(0.dp)
+        else -> RoundedCornerShape(3.dp)
+    }
+    Text(
+        style.label(text),
+        style = MaterialTheme.typography.labelSmall,
+        color = colors.onSurfaceVariant,
+        maxLines = 1,
+        modifier = modifier
+            .background(colors.onSurfaceVariant.copy(alpha = 0.16f), shape)
+            .padding(horizontal = 4.dp, vertical = 1.dp),
+    )
 }
 
 /** Ícono pequeño junto al artista: descargada, en cola, descargando o fallida. */
