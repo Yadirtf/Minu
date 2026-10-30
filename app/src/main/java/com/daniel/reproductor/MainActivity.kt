@@ -51,6 +51,9 @@ import com.daniel.reproductor.ui.components.Tab
 import com.daniel.reproductor.ui.detail.PlaylistDetailScreen
 import com.daniel.reproductor.ui.home.HomeScreen
 import com.daniel.reproductor.ui.library.LibraryViewModel
+import com.daniel.reproductor.ui.library.SaveAction
+import com.daniel.reproductor.ui.library.SaveToPlaylistHost
+import com.daniel.reproductor.ui.library.rememberSaveToPlaylistState
 import com.daniel.reproductor.ui.player.FullPlayerScreen
 import com.daniel.reproductor.ui.player.MiniPlayer
 import com.daniel.reproductor.ui.player.PlayerState
@@ -159,6 +162,8 @@ internal fun AppRoot(
     var liveDedicationId by remember { mutableStateOf<String?>(null) }
     val pending = dedications.firstOrNull { it.incoming && it.seenAt == null }
     val styleId by lib.style.collectAsStateWithLifecycle()
+    val savedIds by lib.savedIds.collectAsStateWithLifecycle()
+    val saveSheet = rememberSaveToPlaylistState()
     val snackbar = remember { SnackbarHostState() }
 
     LaunchedEffect(Unit) { lib.messages.collect { snackbar.showSnackbar(it) } }
@@ -237,7 +242,12 @@ internal fun AppRoot(
             exit = slideOutVertically(tween(260)) { it } + fadeOut(),
         ) {
             BackHandler { fullPlayer = false }
-            player?.let { FullPlayerScreen(it, onClose = { fullPlayer = false }) }
+            player?.let { p ->
+                FullPlayerScreen(
+                    p, onClose = { fullPlayer = false },
+                    save = SaveAction(saved = p.currentVideoId in savedIds) { saveSheet.open(p.currentSong()) },
+                )
+            }
         }
 
         AnimatedVisibility(visible = showStyles, enter = fadeIn(), exit = fadeOut()) {
@@ -272,6 +282,9 @@ internal fun AppRoot(
             Scaffold { padding -> ResolverScreen(Modifier.padding(padding)) }
         }
     }
+
+    // Si se guarda mientras escuchan juntos, a la pareja le llega el aviso
+    SaveToPlaylistHost(saveSheet, lib, onSaved = together::onSongSaved)
 
     if (showSettings) {
         SettingsSheet(

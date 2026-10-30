@@ -9,6 +9,7 @@ const RELAYED = new Set([
   'listen.leave', // alguien salió de la sesión
   'listen.state', // canción, posición y si está sonando (lo manda quien controla)
   'listen.takeControl', // la otra persona pide el control
+  'listen.saved', // a quien escucha le gustó la canción y la guardó en una playlist
   'reaction', // ❤️ 😍 🔥 en vivo
 ]);
 
@@ -67,8 +68,14 @@ export function attachRealtime(server, db, config, push = { send: async () => 0 
       if (!RELAYED.has(msg?.type)) return;
       const partner = await partnerOf(user._id).catch(() => null);
       if (!partner) return;
-      const { type, state, emoji } = msg;
-      const delivered = notify(partner, { type, state, emoji: typeof emoji === 'string' ? emoji.slice(0, 8) : undefined, from: user.displayName });
+      const { type, state, emoji, title } = msg;
+      const delivered = notify(partner, {
+        type,
+        state,
+        emoji: typeof emoji === 'string' ? emoji.slice(0, 8) : undefined,
+        title: typeof title === 'string' ? title.slice(0, 200) : undefined,
+        from: user.displayName,
+      });
       // La invitación a escuchar juntos también llega como notificación si su app está cerrada
       if (!delivered && type === 'listen.invite') await push.send(partner, { type: 'listen.invite', fromName: user.displayName });
     });

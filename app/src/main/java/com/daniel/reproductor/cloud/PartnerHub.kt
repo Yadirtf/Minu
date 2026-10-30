@@ -168,6 +168,16 @@ class PartnerHub(
 
     // ---------- Escuchar juntos ----------
 
+    /**
+     * Guardaste en una playlist lo que suena mientras escuchan juntos: a tu pareja le llega
+     * un corazón en vivo y un aviso con el nombre de la canción.
+     */
+    fun notifySaved(song: Song) {
+        if (!_listen.value.active) return
+        _events.tryEmit(HubEvent.LiveReaction(SAVED_EMOJI, fromMe = true))
+        send(JSONObject().put("type", "listen.saved").put("title", song.title))
+    }
+
     fun inviteListen() {
         _listen.value = ListenSession(ListenMode.INVITING)
         send(JSONObject().put("type", "listen.invite"))
@@ -306,6 +316,15 @@ class PartnerHub(
                 _events.tryEmit(HubEvent.Message("Ahora ${msg.optString("from")} controla la música"))
             }
             "listen.state" -> if (_listen.value.following) follow(msg.getJSONObject("state"))
+            "listen.saved" -> if (_listen.value.active) {
+                _events.tryEmit(HubEvent.LiveReaction(SAVED_EMOJI, fromMe = false))
+                val title = msg.optString("title").takeIf { it.isNotBlank() }
+                _events.tryEmit(
+                    HubEvent.Message(
+                        "A ${msg.optString("from")} le gustó " + (title?.let { "«$it»" } ?: "esta canción") + " y la guardó 💚",
+                    )
+                )
+            }
         }
     }
 
@@ -406,6 +425,8 @@ class PartnerHub(
         if (_listen.value.following) "${partnerName()} controla la música. En Juntos puedes tomar el control." else null
 
     companion object {
+        private const val SAVED_EMOJI = "💚"
+
         /** Lanza el error con un mensaje claro para la pantalla. */
         suspend fun <T> userAction(block: suspend () -> T): Result<T> =
             try {

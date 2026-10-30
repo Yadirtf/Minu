@@ -40,6 +40,7 @@ class MusicRepository(
     fun observePlaylist(id: Long): Flow<Playlist?> = dao.observePlaylist(id)
     fun observeSongs(playlistId: Long): Flow<List<Song>> = dao.observeSongs(playlistId)
     fun observeAllSongs(): Flow<List<Song>> = dao.observeAllSongs()
+    fun observePlaylistIdsFor(videoId: String): Flow<Set<Long>> = dao.observePlaylistIdsFor(videoId).map { it.toSet() }
 
     /** Hasta 4 canciones por playlist (para el mosaico de portada). */
     fun observePlaylistCovers(): Flow<Map<Long, List<Song>>> = dao.observePlaylistSongs().map { rows ->

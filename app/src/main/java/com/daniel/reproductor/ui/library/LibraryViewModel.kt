@@ -16,10 +16,12 @@ import com.daniel.reproductor.data.db.Song
 import com.daniel.reproductor.ui.common.app
 import com.daniel.reproductor.ui.theme.StyleId
 import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
@@ -43,6 +45,13 @@ class LibraryViewModel(
 
     val allSongs: StateFlow<List<Song>?> = repo.observeAllSongs()
         .stateIn(viewModelScope, SharingStarted.Eagerly, null)
+
+    /** videoIds de todo lo guardado: sirve para marcar con ✓ lo que ya está en la biblioteca. */
+    val savedIds: StateFlow<Set<String>> = allSongs
+        .map { songs -> songs.orEmpty().mapTo(HashSet()) { it.videoId } }
+        .stateIn(viewModelScope, SharingStarted.Eagerly, emptySet())
+
+    fun playlistsContaining(videoId: String): Flow<Set<Long>> = repo.observePlaylistIdsFor(videoId)
 
     val playlists: StateFlow<List<PlaylistWithCount>> = repo.observePlaylists()
         .stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())

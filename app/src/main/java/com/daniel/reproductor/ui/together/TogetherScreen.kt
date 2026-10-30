@@ -68,9 +68,14 @@ import com.daniel.reproductor.cloud.ListenMode
 import com.daniel.reproductor.cloud.PartnerInfo
 import com.daniel.reproductor.ui.components.ArtworkImage
 import com.daniel.reproductor.ui.components.EmptyState
+import com.daniel.reproductor.ui.components.EqualizerBars
 import com.daniel.reproductor.ui.components.PillButton
 import com.daniel.reproductor.ui.components.ScreenTitle
 import com.daniel.reproductor.ui.library.LibraryViewModel
+import com.daniel.reproductor.ui.library.SaveAction
+import com.daniel.reproductor.ui.library.SaveToPlaylistButton
+import com.daniel.reproductor.ui.library.SaveToPlaylistHost
+import com.daniel.reproductor.ui.library.rememberSaveToPlaylistState
 import com.daniel.reproductor.ui.player.PlayerState
 import com.daniel.reproductor.ui.theme.LocalAppStyle
 import java.text.DateFormat
@@ -83,7 +88,12 @@ fun TogetherScreen(vm: TogetherViewModel, lib: LibraryViewModel, player: PlayerS
     val partner by vm.partner.collectAsStateWithLifecycle()
     val dedications by vm.dedications.collectAsStateWithLifecycle()
     val busy by vm.busy.collectAsStateWithLifecycle()
+    val savedIds by lib.savedIds.collectAsStateWithLifecycle()
     var dedicating by remember { mutableStateOf(false) }
+    val saveSheet = rememberSaveToPlaylistState()
+    val save = player?.takeIf { it.hasMedia }?.let { p ->
+        SaveAction(saved = p.currentVideoId in savedIds) { saveSheet.open(p.currentSong()) }
+    }
 
     LazyColumn(
         Modifier.fillMaxSize(),
@@ -129,7 +139,7 @@ fun TogetherScreen(vm: TogetherViewModel, lib: LibraryViewModel, player: PlayerS
             else -> {
                 val p = status.partner ?: return@LazyColumn
                 item { CoupleCard(user.displayName.ifBlank { user.username }, p) }
-                item { ListenCard(vm, p) }
+                item { ListenCard(vm, p, player, save) }
                 item { ReactionRow(vm) }
                 item {
                     PillButton("Dedicar una canción", Icons.Default.Send, { dedicating = true }, Modifier.fillMaxWidth())
@@ -148,6 +158,8 @@ fun TogetherScreen(vm: TogetherViewModel, lib: LibraryViewModel, player: PlayerS
             }
         }
     }
+
+    SaveToPlaylistHost(saveSheet, lib, onSaved = vm::onSongSaved)
 
     if (dedicating) {
         DedicateSheet(
@@ -246,7 +258,7 @@ private fun Avatar(name: String, online: Boolean) {
 
 /** Escuchar juntos: invitar, unirse, tomar el control o salir. */
 @Composable
-private fun ListenCard(vm: TogetherViewModel, partner: PartnerInfo) {
+private fun ListenCard(vm: TogetherViewModel, partner: PartnerInfo, player: PlayerState?, save: SaveAction?) {
     val listen by vm.listen.collectAsStateWithLifecycle()
     val name = partner.displayName
     when (listen.mode) {
@@ -276,11 +288,53 @@ private fun ListenCard(vm: TogetherViewModel, partner: PartnerInfo) {
             if (listen.iAmDj) "Tú controlas la música: lo que pongas suena en el celular de $name."
             else "$name controla la música. Puedes reaccionar o tomar el control.",
         ) {
+            if (player != null && save != null) {
+                ListenNowPlaying(player, save, invite = !listen.iAmDj)
+                Spacer(Modifier.height(16.dp))
+            }
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 if (!listen.iAmDj) PillButton("Tomar el control", Icons.Default.SportsEsports, vm::takeControl, Modifier.weight(1f))
                 PillButton("Salir", Icons.Default.LinkOff, vm::leaveListen, Modifier.weight(1f), primary = false)
             }
         }
+    }
+}
+
+/**
+ * Lo que suena en la sesión. A quien escucha se le invita a guardarla si le gusta; al guardarla,
+ * a quien controla le llega un 💚 en vivo.
+ */
+@Composable
+private fun ListenNowPlaying(player: PlayerState, save: SaveAction, invite: Boolean) {
+    val c = MaterialTheme.colorScheme
+    val style = LocalAppStyle.current
+    Row(
+        Modifier.fillMaxWidth().clip(style.cardShape).background(c.surfaceContainerHigh)
+            .clickable(onClick = save.onClick).padding(start = 12.dp, top = 10.dp, bottom = 10.dp, end = 4.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        ArtworkImage(player.metadata.artworkUri, Modifier.size(52.dp))
+        Spacer(Modifier.width(12.dp))
+        Column(Modifier.weight(1f)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                EqualizerBars(player.isPlaying, Modifier.size(width = 14.dp, height = 12.dp))
+                Spacer(Modifier.width(6.dp))
+                Text(
+                    player.metadata.title?.toString().orEmpty(), style = MaterialTheme.typography.titleSmall,
+                    maxLines = 1, overflow = TextOverflow.Ellipsis,
+                )
+            }
+            Text(
+                when {
+                    save.saved -> "En tu biblioteca · toca para otra playlist"
+                    invite -> "¿Te gusta? Guárdala en una playlist"
+                    else -> player.metadata.artist?.toString().orEmpty()
+                },
+                style = MaterialTheme.typography.bodySmall, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                color = if (invite && !save.saved) c.primary else c.onSurfaceVariant,
+            )
+        }
+        SaveToPlaylistButton(save, tint = c.onSurface)
     }
 }
 
