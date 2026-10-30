@@ -81,13 +81,11 @@ Los nombres deben ser exactos (mayúsculas incluidas). GitHub nunca vuelve a mos
 
 ## 4. Generar la APK
 
-- **Cuando quieras:** pestaña **Actions → APK firmada → Run workflow**. Al terminar, la APK está abajo en **Artifacts** (se guarda 30 días).
-- **Como versión publicada:** sube `versionCode` en `app/build.gradle.kts` y crea un tag:
-  ```bash
-  git tag v1.1
-  git push origin v1.1
-  ```
-  Además del artifact, aparece en **Releases** con la APK adjunta.
+- **Publicar una versión (lo normal):** pestaña **Actions → APK firmada → Run workflow**, escribe la versión (por ejemplo `1.2`) y pulsa **Run workflow**. En unos 10 minutos aparece en **Releases** como `Minu v1.2` con la APK adjunta, y Obtainium la detecta.
+  - No hay que editar `app/build.gradle.kts`: el `versionCode` sale de la versión (`1.2` → `10200`, `1.2.3` → `10203`).
+  - Cada versión debe ser mayor que la anterior; si repites una, el workflow falla y te avisa.
+  - También funciona con un tag desde la terminal: `git tag v1.2 && git push origin v1.2`.
+- **Solo compilar para probar:** lo mismo pero con la versión vacía. La APK queda abajo en **Artifacts** (30 días) y no se publica Release.
 
 ## 5. Comprobar el SHA-1
 

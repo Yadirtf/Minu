@@ -28,8 +28,9 @@ android {
         applicationId = "com.adrian.minu"
         minSdk = 26
         targetSdk = 36
-        versionCode = 2
-        versionName = "1.0"
+        // GitHub Actions las calcula del tag (v1.2 -> 10200 / "1.2"); en local se usan estos valores
+        versionCode = providers.gradleProperty("minu.versionCode").map(String::toInt).getOrElse(2)
+        versionName = providers.gradleProperty("minu.versionName").getOrElse("1.0")
         // URL del servidor en Render: se cambia en gradle.properties (minu.serverUrl)
         buildConfigField("String", "SERVER_URL", "\"${providers.gradleProperty("minu.serverUrl").getOrElse("")}\"")
         // "ID de cliente web" de Google para "Continuar con Google" (gradle.properties: minu.googleWebClientId)

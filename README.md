@@ -51,6 +51,16 @@ El APK queda en `app/build/outputs/apk/release/app-release.apk`.
 
 También se puede compilar en GitHub Actions sin tu computador: ver [.github/FIRMA_APK.md](.github/FIRMA_APK.md).
 
+## 5. Instalar y actualizar con Obtainium
+
+Cada versión publicada (ver [.github/FIRMA_APK.md](.github/FIRMA_APK.md), paso 4) queda en **Releases**. [Obtainium](https://github.com/ImranR98/Obtainium) revisa ese Release y avisa cuando hay una versión nueva, como una tienda:
+
+1. Instala Obtainium en el celular desde [sus releases](https://github.com/ImranR98/Obtainium/releases).
+2. **Add app** → pega `https://github.com/Yadirtf/Minu` → **Add** → **Install**.
+3. Cuando publiques otra versión, Obtainium manda una notificación; toca **Update**.
+
+La APK siempre se firma con el mismo keystore, así que se actualiza encima sin perder playlists ni descargas.
+
 ## Uso en dos celulares
 
 1. Cada persona instala Minu y crea su cuenta (Ajustes → Cuenta y nube) con el código de invitación.
