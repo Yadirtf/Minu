@@ -21,7 +21,7 @@ import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.QueueMusic
+import androidx.compose.material.icons.filled.Album
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material3.DropdownMenu
@@ -81,17 +81,17 @@ fun PlaylistsScreen(lib: LibraryViewModel, onOpenPlaylist: (Long) -> Unit) {
             Column(Modifier.padding(start = 4.dp, top = 12.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     ProfileButton(Modifier.padding(end = 14.dp))
-                    ScreenTitle("Playlists", subtitle = "${playlists.size} playlists")
+                    ScreenTitle("Álbumes", subtitle = if (playlists.size == 1) "1 álbum" else "${playlists.size} álbumes")
                 }
                 PillButton(
-                    "Nueva playlist", Icons.Default.Add, { dialog = PlaylistDialog.Create },
+                    "Nuevo álbum", Icons.Default.Add, { dialog = PlaylistDialog.Create },
                     Modifier.padding(top = 16.dp).fillMaxWidth(),
                 )
             }
         }
         if (playlists.isEmpty()) {
             item(span = { GridItemSpan(maxLineSpan) }) {
-                EmptyState(Icons.AutoMirrored.Filled.QueueMusic, "Sin playlists", "Crea una para organizar tus canciones.")
+                EmptyState(Icons.Default.Album, "Sin álbumes", "Crea uno para organizar tus canciones.")
             }
         }
         items(playlists, key = { it.playlist.id }) { item ->
@@ -110,19 +110,19 @@ fun PlaylistsScreen(lib: LibraryViewModel, onOpenPlaylist: (Long) -> Unit) {
     when (val d = dialog) {
         null -> Unit
         PlaylistDialog.Create -> TextInputDialog(
-            title = "Nueva playlist", label = "Nombre", confirmText = "Crear",
+            title = "Nuevo álbum", label = "Nombre", confirmText = "Crear",
             onDismiss = { dialog = null },
             onConfirm = { lib.createPlaylist(it); dialog = null },
         )
         is PlaylistDialog.Rename -> TextInputDialog(
-            title = "Renombrar playlist", label = "Nombre", confirmText = "Guardar",
+            title = "Renombrar álbum", label = "Nombre", confirmText = "Guardar",
             initial = d.playlist.name,
             onDismiss = { dialog = null },
             onConfirm = { lib.renamePlaylist(d.playlist.id, it); dialog = null },
         )
         is PlaylistDialog.Delete -> ConfirmDialog(
-            title = "Eliminar playlist",
-            text = "¿Eliminar \"${d.playlist.name}\"? Las canciones que estén en otras playlists se conservan.",
+            title = "Eliminar álbum",
+            text = "¿Eliminar \"${d.playlist.name}\"? Las canciones que estén en otros álbumes se conservan.",
             confirmText = "Eliminar",
             onDismiss = { dialog = null },
             onConfirm = { lib.deletePlaylist(d.playlist.id); dialog = null },
@@ -179,7 +179,7 @@ fun PlaylistMosaic(cover: List<Song>, thumbnail: (Song) -> Any, modifier: Modifi
     Box(modifier.clip(shape).background(MaterialTheme.colorScheme.surfaceVariant).then(border)) {
         when {
             cover.isEmpty() -> Icon(
-                Icons.AutoMirrored.Filled.QueueMusic, null,
+                Icons.Default.Album, null,
                 tint = MaterialTheme.colorScheme.primary.copy(alpha = 0.6f),
                 modifier = Modifier.align(Alignment.Center).fillMaxSize(0.4f),
             )

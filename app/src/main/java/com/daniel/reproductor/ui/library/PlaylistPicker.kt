@@ -57,7 +57,7 @@ fun PlaylistPickerSheet(song: Song, lib: LibraryViewModel, onDismiss: () -> Unit
 
     if (creating) {
         TextInputDialog(
-            title = "Nueva playlist", label = "Nombre", confirmText = "Crear y agregar",
+            title = "Nuevo álbum", label = "Nombre", confirmText = "Crear y agregar",
             onDismiss = { creating = false },
             onConfirm = { lib.createPlaylistAndAdd(it, song); onSaved(song); creating = false; onDismiss() },
         )
@@ -71,7 +71,7 @@ fun PlaylistPickerSheet(song: Song, lib: LibraryViewModel, onDismiss: () -> Unit
         shape = style.cardShape,
     ) {
         Text(
-            style.label("Agregar a playlist"),
+            style.label("Agregar a un álbum"),
             style = MaterialTheme.typography.titleLarge,
             modifier = Modifier.padding(horizontal = 24.dp),
         )
@@ -87,7 +87,7 @@ fun PlaylistPickerSheet(song: Song, lib: LibraryViewModel, onDismiss: () -> Unit
                 PickerRow(onClick = { creating = true }) {
                     Icon(Icons.Default.Add, null, Modifier.size(48.dp).padding(12.dp), tint = MaterialTheme.colorScheme.primary)
                     Spacer(Modifier.width(16.dp))
-                    Text(style.label("Nueva playlist"), style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary)
+                    Text(style.label("Nuevo álbum"), style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary)
                 }
             }
             items(playlists, key = { it.playlist.id }) { item ->
@@ -107,7 +107,7 @@ fun PlaylistPickerSheet(song: Song, lib: LibraryViewModel, onDismiss: () -> Unit
                             color = if (added) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                     }
-                    if (added) Icon(Icons.Default.CheckCircle, "Ya está en esta playlist", tint = MaterialTheme.colorScheme.primary)
+                    if (added) Icon(Icons.Default.CheckCircle, "Ya está en este álbum", tint = MaterialTheme.colorScheme.primary)
                 }
             }
         }
@@ -127,7 +127,7 @@ private fun PickerRow(onClick: () -> Unit, content: @Composable androidx.compose
 
 /** Acciones del menú ⋮ de una canción de la biblioteca. */
 fun songActions(song: Song, lib: LibraryViewModel, onAddToPlaylist: () -> Unit): List<MenuAction> = buildList {
-    add(MenuAction("Agregar a playlist", Icons.AutoMirrored.Filled.PlaylistAdd, onAddToPlaylist))
+    add(MenuAction("Agregar a un álbum", Icons.AutoMirrored.Filled.PlaylistAdd, onAddToPlaylist))
     when (song.downloadState) {
         DownloadState.NONE, DownloadState.FAILED -> add(MenuAction("Descargar", Icons.Default.Download) { lib.download(song) })
         DownloadState.DONE -> add(MenuAction("Eliminar descarga", Icons.Default.DownloadForOffline) { lib.deleteDownload(song) })

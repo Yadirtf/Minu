@@ -91,7 +91,7 @@ class ShareActivity : ComponentActivity() {
 
         if (creating) {
             TextInputDialog(
-                title = "Nueva playlist", label = "Nombre", confirmText = "Crear y agregar",
+                title = "Nuevo álbum", label = "Nombre", confirmText = "Crear y agregar",
                 onDismiss = { creating = false },
                 onConfirm = { name ->
                     creating = false
@@ -104,7 +104,7 @@ class ShareActivity : ComponentActivity() {
 
         AlertDialog(
             onDismissRequest = { if (!busy) finish() },
-            title = { Text(if (busy) "Agregando…" else "¿A qué playlist la agrego?") },
+            title = { Text(if (busy) "Agregando…" else "¿A qué álbum la agrego?") },
             text = {
                 when {
                     busy -> Row(verticalAlignment = Alignment.CenterVertically) {
@@ -125,7 +125,7 @@ class ShareActivity : ComponentActivity() {
                             }
                         }
                         ListItem(
-                            headlineContent = { Text("Nueva playlist") },
+                            headlineContent = { Text("Nuevo álbum") },
                             leadingContent = { Icon(Icons.Default.Add, null) },
                             colors = ListItemDefaults.colors(containerColor = Color.Transparent),
                             modifier = Modifier.padding(top = 4.dp).clickable { creating = true },

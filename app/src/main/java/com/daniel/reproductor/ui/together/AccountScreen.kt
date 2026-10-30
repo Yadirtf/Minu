@@ -92,8 +92,8 @@ private fun SignInForm(vm: TogetherViewModel) {
     var advanced by rememberSaveable { mutableStateOf(false) }
 
     Text(
-        "Con una cuenta tus playlists se guardan en la nube. Si cambias de celular, inicias sesión y vuelve toda tu música. " +
-            "También la necesitas para Juntos.",
+        "Con una cuenta tus álbumes se guardan en la nube. Si cambias de celular, inicias sesión y vuelve toda tu música. " +
+            "También la necesitas para Dúo.",
         style = MaterialTheme.typography.bodyMedium,
         color = MaterialTheme.colorScheme.onSurfaceVariant,
     )
@@ -211,8 +211,8 @@ private fun SignedIn(vm: TogetherViewModel) {
     }
     Spacer(Modifier.height(16.dp))
     Text(
-        "Tus playlists se suben solas unos segundos después de cada cambio. En un celular nuevo, inicia sesión con este usuario " +
-            "y todo vuelve. Las canciones descargadas se bajan de nuevo desde cada playlist.",
+        "Tus álbumes se suben solas unos segundos después de cada cambio. En un celular nuevo, inicia sesión con este usuario " +
+            "y todo vuelve. Las canciones descargadas se bajan de nuevo desde cada álbum.",
         style = MaterialTheme.typography.bodySmall,
         color = c.onSurfaceVariant,
     )

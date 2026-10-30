@@ -8,6 +8,7 @@ import com.daniel.reproductor.cloud.Account
 import com.daniel.reproductor.cloud.CloudApi
 import com.daniel.reproductor.cloud.CloudSync
 import com.daniel.reproductor.cloud.Dedication
+import com.daniel.reproductor.cloud.HubEvent
 import com.daniel.reproductor.cloud.ListenSession
 import com.daniel.reproductor.cloud.PartnerHub
 import com.daniel.reproductor.cloud.PartnerStatus
@@ -18,13 +19,15 @@ import com.daniel.reproductor.data.UserFacingException
 import com.daniel.reproductor.data.db.Song
 import com.daniel.reproductor.ui.common.app
 import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.launch
 
-/** Cuenta en la nube y todo lo de "Juntos". */
+/** Cuenta en la nube y todo lo de "Dúo". */
 class TogetherViewModel(
     private val session: Session,
     private val api: CloudApi,
@@ -40,6 +43,7 @@ class TogetherViewModel(
     val dedications: StateFlow<List<Dedication>> = hub.dedications
     val listen: StateFlow<ListenSession> = hub.listen
     val connected: StateFlow<Boolean> = hub.connected
+    val events: Flow<HubEvent> = hub.events
 
     private val _busy = MutableStateFlow(false)
     val busy: StateFlow<Boolean> = _busy.asStateFlow()
@@ -114,6 +118,14 @@ class TogetherViewModel(
     fun play(dedication: Dedication) = hub.playDedication(dedication)
     fun markSeen(dedication: Dedication) = hub.markSeen(dedication)
     fun sendLiveReaction(emoji: String) = hub.sendLiveReaction(emoji)
+
+    /** Latidos: varios corazones seguidos, tantos como fuerte lo sostuviste. */
+    fun sendHeartbeats(count: Int) = viewModelScope.launch {
+        repeat(count.coerceIn(1, 5)) {
+            hub.sendLiveReaction("❤️")
+            delay(160)
+        }
+    }
     fun onSongSaved(song: Song) = hub.notifySaved(song)
 
     fun inviteListen() = hub.inviteListen()
@@ -134,6 +146,12 @@ class TogetherViewModel(
             }
         }
 
+        /** Reacciones para las dedicatorias: el servidor solo acepta estas. */
         val EMOJIS = listOf("❤️", "😍", "🔥", "😘", "💃", "🎶")
+
+        /** Reacciones en vivo: el servidor las reenvía tal cual, así que pueden ser más. */
+        val LIVE_EMOJIS = listOf("😘", "🥺", "🔥", "😍", "💃", "🎶", "😂", "✨")
+
+        const val HUG = "🫂"
     }
 }

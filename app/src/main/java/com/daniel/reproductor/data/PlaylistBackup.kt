@@ -64,7 +64,7 @@ object PlaylistBackup {
 
     fun decodeObject(root: JSONObject): Snapshot {
         val playlists = root.optJSONArray("playlists")
-            ?: throw UserFacingException("El archivo no contiene playlists.")
+            ?: throw UserFacingException("El archivo no contiene álbumes.")
 
         val entries = (0 until playlists.length()).map { i ->
             val p = playlists.getJSONObject(i)

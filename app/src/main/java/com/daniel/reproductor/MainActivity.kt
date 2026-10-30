@@ -46,6 +46,7 @@ import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
@@ -55,6 +56,7 @@ import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.daniel.reproductor.ui.components.START_TAB
 import com.daniel.reproductor.ui.components.StyledBottomBar
 import com.daniel.reproductor.ui.components.Tab
 import com.daniel.reproductor.ui.detail.PlaylistDetailScreen
@@ -164,7 +166,7 @@ internal fun AppRoot(
     val app = LocalContext.current.applicationContext as ReproductorApp
     val hub = app.partnerHub
     // Las pestañas viven en un pager: se cambia deslizando o con la barra inferior, y ambos quedan sincronizados
-    val pager = rememberPagerState(initialPage = Tab.HOME.ordinal) { Tab.entries.size }
+    val pager = rememberPagerState(initialPage = START_TAB.ordinal) { Tab.entries.size }
     // targetPage, no currentPage: la barra resalta el destino apenas el dedo pasa la mitad, como en WhatsApp
     val tab = Tab.entries[pager.targetPage]
     val drawer = rememberDrawerState(DrawerValue.Closed)
@@ -230,10 +232,10 @@ internal fun AppRoot(
     }
     val profileEntry = remember(profile) { ProfileEntry(profile) { scope.launch { drawer.open() } } }
 
-    // Atrás: cierra capas en orden y al final vuelve a Inicio (el último registrado tiene prioridad)
+    // Atrás: cierra capas en orden y al final vuelve a Buscar, la pestaña de inicio (el último registrado tiene prioridad)
     BackHandler(enabled = searchInPlaylist != NONE) { searchInPlaylist = NONE }
     BackHandler(enabled = searchInPlaylist == NONE && openPlaylist != NONE) { openPlaylist = NONE }
-    BackHandler(enabled = openPlaylist == NONE && tab != Tab.HOME) { goTo(Tab.HOME) }
+    BackHandler(enabled = openPlaylist == NONE && tab != START_TAB) { goTo(START_TAB) }
     BackHandler(enabled = drawer.isOpen) { scope.launch { drawer.close() } }
 
     val hasMedia = player != null && player.hasMedia
@@ -242,6 +244,8 @@ internal fun AppRoot(
         openPlaylist != NONE -> "playlist-$openPlaylist"
         else -> TABS
     }
+    // En Dúo las reacciones viajan por el hilo: ahí no hace falta que además floten por la pantalla
+    val duoVisible by rememberUpdatedState(screenKey == TABS && tab == Tab.TOGETHER && partner?.linked == true)
 
     Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
         // El panel solo se arrastra para cerrarlo: abrirlo deslizando chocaría con el cambio de pestañas
@@ -297,7 +301,7 @@ internal fun AppRoot(
         }
 
         SnackbarHost(snackbar, Modifier.align(Alignment.BottomCenter).padding(bottom = if (hasMedia) 150.dp else 90.dp))
-        FloatingReactions(hub.events)
+        FloatingReactions(hub.events) { duoVisible }
 
         AnimatedVisibility(
             visible = fullPlayer && hasMedia,

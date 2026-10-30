@@ -202,7 +202,7 @@ private fun CompactSongRow(
                     onClick = { menu = false; onPlayNext() },
                 )
                 DropdownMenuItem(
-                    text = { Text("Agregar a playlist") },
+                    text = { Text("Agregar a un álbum") },
                     leadingIcon = { Icon(Icons.AutoMirrored.Filled.PlaylistAdd, null) },
                     onClick = { menu = false; onAddToPlaylist() },
                 )

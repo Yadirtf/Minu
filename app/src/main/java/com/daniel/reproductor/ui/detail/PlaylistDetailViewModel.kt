@@ -46,7 +46,7 @@ class PlaylistDetailViewModel(
             val msg = try {
                 when (val r = repo.addToPlaylist(playlistId, link)) {
                     is AddResult.Added -> "Agregada: ${r.song.title}"
-                    is AddResult.AlreadyInPlaylist -> "Ya estaba en la playlist: ${r.song.title}"
+                    is AddResult.AlreadyInPlaylist -> "Ya estaba en el álbum: ${r.song.title}"
                 }
             } catch (e: UserFacingException) {
                 e.message.orEmpty()
@@ -75,7 +75,7 @@ class PlaylistDetailViewModel(
 
     fun deleteAllDownloads() = viewModelScope.launch {
         repo.deletePlaylistDownloads(playlistId)
-        _messages.send("Descargas de la playlist eliminadas")
+        _messages.send("Descargas del álbum eliminadas")
     }
 
     val isOnline: StateFlow<Boolean> = network.isOnline

@@ -182,7 +182,7 @@ fun SearchScreen(
                                                 if (song.videoId in inLibrary) {
                                                     Icon(Icons.Default.CheckCircle, "Ya está guardada", tint = MaterialTheme.colorScheme.primary)
                                                 } else {
-                                                    Icon(Icons.Default.AddCircleOutline, "Agregar a playlist")
+                                                    Icon(Icons.Default.AddCircleOutline, "Agregar al álbum")
                                                 }
                                             }
                                         },

@@ -152,12 +152,15 @@ private fun FloatingHearts() {
     }
 }
 
-/** Emojis que vuelan cuando alguien reacciona (en los dos celulares). */
+/**
+ * Emojis que vuelan cuando alguien reacciona (en los dos celulares). Con [suppress] en true no se
+ * muestran: en la pestaña Dúo las reacciones ya viajan por el hilo.
+ */
 @Composable
-fun FloatingReactions(events: Flow<HubEvent>) {
+fun FloatingReactions(events: Flow<HubEvent>, suppress: () -> Boolean = { false }) {
     val items = remember { mutableStateListOf<Pair<Long, String>>() }
     LaunchedEffect(events) {
-        events.collect { e -> if (e is HubEvent.LiveReaction) items += System.nanoTime() to e.emoji }
+        events.collect { e -> if (e is HubEvent.LiveReaction && !suppress()) items += System.nanoTime() to e.emoji }
     }
     BoxWithConstraints(Modifier.fillMaxSize()) {
         items.toList().forEach { (id, emoji) ->

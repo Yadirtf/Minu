@@ -56,7 +56,7 @@ class SettingsViewModel(
     fun chooseDownloadFolder(tree: Uri) = viewModelScope.launch {
         val msg = try {
             downloads.useFolder(tree)
-            "Las descargas se guardarán en una carpeta por playlist"
+            "Las descargas se guardarán en una carpeta por álbum"
         } catch (e: SecurityException) {
             "Android no permitió usar esa carpeta. Elige otra."
         }
@@ -92,7 +92,7 @@ class SettingsViewModel(
                 contentResolver.openOutputStream(uri, "wt")?.use { it.write(json.toByteArray()) }
                     ?: error("No se pudo abrir el archivo")
             }
-            "Playlists exportadas"
+            "Álbumes exportados"
         } catch (e: Exception) {
             "No se pudo exportar: ${e.message}"
         }

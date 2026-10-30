@@ -1,14 +1,23 @@
 package com.daniel.reproductor.ui.together
 
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.animate
 import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.gestures.detectVerticalDragGestures
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -27,7 +36,9 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Cloud
 import androidx.compose.material.icons.filled.Favorite
@@ -35,8 +46,8 @@ import androidx.compose.material.icons.filled.Headphones
 import androidx.compose.material.icons.filled.LinkOff
 import androidx.compose.material.icons.filled.PersonAdd
 import androidx.compose.material.icons.filled.PlayArrow
-import androidx.compose.material.icons.filled.Send
 import androidx.compose.material.icons.filled.SportsEsports
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
@@ -47,27 +58,38 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.draw.scale
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.text.font.FontStyle
-import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.daniel.reproductor.cloud.Dedication
 import com.daniel.reproductor.cloud.ListenMode
+import com.daniel.reproductor.cloud.ListenSession
 import com.daniel.reproductor.cloud.PartnerInfo
 import com.daniel.reproductor.ui.components.ArtworkImage
-import com.daniel.reproductor.ui.components.EmptyState
 import com.daniel.reproductor.ui.components.EqualizerBars
 import com.daniel.reproductor.ui.components.PillButton
 import com.daniel.reproductor.ui.components.ScreenTitle
@@ -79,62 +101,88 @@ import com.daniel.reproductor.ui.library.rememberSaveToPlaylistState
 import com.daniel.reproductor.ui.player.PlayerState
 import com.daniel.reproductor.ui.profile.ProfileButton
 import com.daniel.reproductor.ui.theme.LocalAppStyle
+import kotlinx.coroutines.launch
 import java.text.DateFormat
 import java.util.Date
 
-/** Pestaña Juntos: vincular a tu pareja, dedicarle canciones y escuchar música a la vez. */
+private val AIRMAIL_BLUE = Color(0xFF3D6BFF)
+
+/**
+ * Pestaña Dúo: el rincón de la pareja. Arriba el hilo rojo que los une (con gestos), luego escuchar
+ * juntos y dedicar, los detalles que se lanzan por el hilo y las cartas (dedicatorias).
+ */
 @Composable
 fun TogetherScreen(vm: TogetherViewModel, lib: LibraryViewModel, player: PlayerState?, onOpenAccount: () -> Unit) {
     val account by vm.account.collectAsStateWithLifecycle()
     val partner by vm.partner.collectAsStateWithLifecycle()
     val dedications by vm.dedications.collectAsStateWithLifecycle()
+    val listen by vm.listen.collectAsStateWithLifecycle()
     val busy by vm.busy.collectAsStateWithLifecycle()
     val savedIds by lib.savedIds.collectAsStateWithLifecycle()
     var dedicating by remember { mutableStateOf(false) }
+    var confirmUnlink by remember { mutableStateOf(false) }
     val saveSheet = rememberSaveToPlaylistState()
     val save = player?.takeIf { it.hasMedia }?.let { p ->
         SaveAction(saved = p.currentVideoId in savedIds) { saveSheet.open(p.currentSong()) }
     }
 
+    val user = account
+    val status = partner
+    val myName = user?.displayName?.ifBlank { user.username } ?: "Tú"
+    val linkedPartner = status?.partner?.takeIf { user != null && status.linked }
+
     LazyColumn(
         Modifier.fillMaxSize(),
         contentPadding = PaddingValues(
-            start = 20.dp, end = 20.dp, bottom = 24.dp,
+            start = 20.dp, end = 20.dp, bottom = 32.dp,
             top = WindowInsets.statusBars.asPaddingValues().calculateTopPadding() + 12.dp,
         ),
-        verticalArrangement = Arrangement.spacedBy(16.dp),
+        verticalArrangement = Arrangement.spacedBy(18.dp),
     ) {
         item {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 ProfileButton(Modifier.padding(end = 14.dp))
-                ScreenTitle("Juntos", subtitle = "Tu música, compartida")
+                ScreenTitle(
+                    "Dúo",
+                    subtitle = linkedPartner?.let { "$myName & ${it.displayName}" } ?: "Un rincón para dos",
+                )
             }
         }
         if (busy) item { LinearProgressIndicator(Modifier.fillMaxWidth()) }
 
-        val user = account
-        val status = partner
+        item {
+            DuoHero(
+                me = myName,
+                partner = linkedPartner,
+                playing = player?.isPlaying == true,
+                events = vm.events,
+                onHeartbeat = { vm.sendHeartbeats(it) },
+                onHug = { vm.sendLiveReaction(TogetherViewModel.HUG) },
+            )
+        }
+
         when {
             user == null -> item {
-                EmptyState(
-                    Icons.Default.Favorite, "Comparte tu música",
-                    "Crea tu cuenta para vincularte con tu pareja, dedicarle canciones y escuchar juntos. " +
-                        "También respalda tu música en la nube.",
-                )
-                PillButton("Crear cuenta o iniciar sesión", Icons.Default.Cloud, onOpenAccount, Modifier.fillMaxWidth())
+                InfoCard(
+                    "Su rincón empieza aquí 💞",
+                    "Crea tu cuenta para atar tu hilo con tu pareja: se dedican canciones, escuchan lo mismo al " +
+                        "mismo tiempo y se mandan latidos. También respalda tu música en la nube.",
+                ) {
+                    PillButton("Crear cuenta o iniciar sesión", Icons.Default.Cloud, onOpenAccount, Modifier.fillMaxWidth())
+                }
             }
             status == null -> item { LinearProgressIndicator(Modifier.fillMaxWidth()) }
             status.status == "none" -> item { LinkPartner(vm, user.username) }
             status.status == "sent" -> item {
                 InfoCard(
                     "Esperando a ${status.partner?.displayName}",
-                    "Le enviaste una invitación. Cuando abra Minu y la acepte, quedarán vinculados.",
+                    "Le enviaste una invitación. Cuando abra Minu y la acepte, el hilo quedará atado.",
                 ) { TextButton(onClick = vm::unlinkPartner) { Text("Cancelar invitación") } }
             }
             status.status == "received" -> item {
                 InfoCard(
-                    "${status.partner?.displayName} quiere vincularse contigo 💞",
-                    "Podrán dedicarse canciones y escuchar música al mismo tiempo.",
+                    "${status.partner?.displayName} quiere atar su hilo contigo 💞",
+                    "Podrán dedicarse canciones, escuchar música al mismo tiempo y mandarse latidos.",
                 ) {
                     Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                         PillButton("Aceptar", Icons.Default.Favorite, vm::acceptPartner, Modifier.weight(1f))
@@ -142,20 +190,26 @@ fun TogetherScreen(vm: TogetherViewModel, lib: LibraryViewModel, player: PlayerS
                     }
                 }
             }
-            else -> {
-                val p = status.partner ?: return@LazyColumn
-                item { CoupleCard(user.displayName.ifBlank { user.username }, p) }
-                item { ListenCard(vm, p, player, save) }
-                item { ReactionRow(vm) }
-                item {
-                    PillButton("Dedicar una canción", Icons.Default.Send, { dedicating = true }, Modifier.fillMaxWidth())
+            linkedPartner != null -> {
+                val p = linkedPartner
+                item { DuoActions(vm, p, listen, onDedicate = { dedicating = true }) }
+                if (listen.mode == ListenMode.INVITED || listen.active) {
+                    item { ListenCard(vm, p, listen, player, save) }
                 }
-                if (dedications.isNotEmpty()) {
-                    item { Text(LocalAppStyle.current.label("Dedicatorias"), style = MaterialTheme.typography.titleLarge) }
-                    items(dedications, key = { it.id }) { d -> DedicationCard(d, vm) }
+                item { ReactionTray(p, onSend = vm::sendLiveReaction) }
+                item { LettersHeader(dedications.size) }
+                if (dedications.isEmpty()) {
+                    item {
+                        Text(
+                            "Aún no hay cartas. Dedícale la primera canción 💌",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
                 }
+                itemsIndexed(dedications, key = { _, d -> d.id }) { i, d -> LetterCard(d, i, p.displayName, vm) }
                 item {
-                    TextButton(onClick = vm::unlinkPartner, modifier = Modifier.fillMaxWidth()) {
+                    TextButton(onClick = { confirmUnlink = true }, modifier = Modifier.fillMaxWidth()) {
                         Icon(Icons.Default.LinkOff, null)
                         Spacer(Modifier.size(8.dp))
                         Text("Desvincular")
@@ -176,14 +230,26 @@ fun TogetherScreen(vm: TogetherViewModel, lib: LibraryViewModel, player: PlayerS
             onSend = { song, message, autoplay -> vm.sendDedication(song, message, autoplay); dedicating = false },
         )
     }
+
+    if (confirmUnlink) {
+        AlertDialog(
+            onDismissRequest = { confirmUnlink = false },
+            title = { Text("¿Cortar el hilo?") },
+            text = { Text("Dejarán de compartir dedicatorias, latidos y la música en vivo. Pueden volver a vincularse cuando quieran.") },
+            confirmButton = {
+                TextButton(onClick = { confirmUnlink = false; vm.unlinkPartner() }) { Text("Desvincular") }
+            },
+            dismissButton = { TextButton(onClick = { confirmUnlink = false }) { Text("Cancelar") } },
+        )
+    }
 }
 
 @Composable
 private fun LinkPartner(vm: TogetherViewModel, myUsername: String) {
     var username by rememberSaveable { mutableStateOf("") }
     InfoCard(
-        "Vincula a tu pareja 💞",
-        "Escribe su usuario de Minu. Tu usuario es @$myUsername: compártelo para que te encuentre.",
+        "Ata tu hilo 💞",
+        "Escribe el usuario de Minu de tu pareja. El tuyo es @$myUsername: compártelo para que te encuentre.",
     ) {
         OutlinedTextField(
             value = username, onValueChange = { username = it }, label = { Text("Usuario de tu pareja") },
@@ -199,7 +265,10 @@ private fun InfoCard(title: String, text: String, content: @Composable () -> Uni
     val style = LocalAppStyle.current
     Surface(
         color = MaterialTheme.colorScheme.surfaceContainer, shape = style.cardShape,
-        border = if (style.border > 0.dp) androidx.compose.foundation.BorderStroke(style.border, MaterialTheme.colorScheme.outline) else null,
+        border = BorderStroke(
+            if (style.border > 0.dp) style.border else 1.dp,
+            if (style.border > 0.dp) MaterialTheme.colorScheme.outline else THREAD_RED.copy(alpha = 0.25f),
+        ),
         modifier = Modifier.fillMaxWidth(),
     ) {
         Column(Modifier.padding(20.dp)) {
@@ -212,77 +281,84 @@ private fun InfoCard(title: String, text: String, content: @Composable () -> Uni
     }
 }
 
-/** Tarjeta de la pareja: iniciales, corazón que late y si está conectada. */
+/** Las dos cosas grandes que hacen juntos: escuchar a la vez y dedicarse canciones. */
 @Composable
-private fun CoupleCard(me: String, partner: PartnerInfo) {
-    val c = MaterialTheme.colorScheme
-    val style = LocalAppStyle.current
-    val beat by rememberInfiniteTransition(label = "heart").animateFloat(
-        1f, 1.18f, infiniteRepeatable(tween(600), RepeatMode.Reverse), label = "beat",
-    )
-    Box(
-        Modifier.fillMaxWidth().clip(style.cardShape)
-            .background(Brush.linearGradient(listOf(c.primary, c.secondary)))
-            .padding(22.dp),
-    ) {
-        Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.fillMaxWidth()) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Avatar(me, online = true)
-                Icon(
-                    Icons.Default.Favorite, null, tint = Color.White,
-                    modifier = Modifier.padding(horizontal = 18.dp).size(34.dp).scale(if (partner.online) beat else 1f),
-                )
-                Avatar(partner.displayName, online = partner.online)
-            }
-            Spacer(Modifier.height(14.dp))
-            Text("$me & ${partner.displayName}", color = Color.White, style = MaterialTheme.typography.titleLarge, textAlign = TextAlign.Center)
-            Text(
-                if (partner.online) "${partner.displayName} está en Minu ahora" else "${partner.displayName} no tiene Minu abierta ahora",
-                color = Color.White.copy(alpha = 0.85f), style = MaterialTheme.typography.bodyMedium,
-            )
-        }
+private fun DuoActions(vm: TogetherViewModel, partner: PartnerInfo, listen: ListenSession, onDedicate: () -> Unit) {
+    val name = partner.displayName
+    val listenTitle = when (listen.mode) {
+        ListenMode.NONE -> "Escuchar juntos"
+        ListenMode.INVITING -> "Esperando…"
+        ListenMode.INVITED -> "Te invitó"
+        ListenMode.ACTIVE -> "En sintonía"
     }
-}
-
-@Composable
-private fun Avatar(name: String, online: Boolean) {
-    Box {
-        Box(
-            Modifier.size(64.dp).clip(CircleShape).background(Color.White.copy(alpha = 0.22f))
-                .border(2.dp, Color.White.copy(alpha = 0.7f), CircleShape),
-            contentAlignment = Alignment.Center,
-        ) {
-            Text(name.take(1).uppercase(), color = Color.White, fontSize = 28.sp, style = MaterialTheme.typography.headlineMedium)
-        }
-        Box(
-            Modifier.align(Alignment.BottomEnd).size(16.dp).clip(CircleShape)
-                .background(if (online) Color(0xFF3DDC84) else Color(0xFF9E9E9E))
-                .border(2.dp, Color.White, CircleShape)
+    val listenSubtitle = when (listen.mode) {
+        ListenMode.NONE -> if (partner.online) "Invita a $name" else "Invita a $name · le llegará un aviso"
+        ListenMode.INVITING -> "Toca para cancelar"
+        ListenMode.INVITED -> "Toca para unirte"
+        ListenMode.ACTIVE -> if (listen.iAmDj) "Tú pones la música" else "$name pone la música"
+    }
+    val onListen: () -> Unit = when (listen.mode) {
+        ListenMode.NONE -> { { vm.inviteListen() } }
+        ListenMode.INVITING -> { { vm.leaveListen() } }
+        ListenMode.INVITED -> { { vm.acceptListen() } }
+        ListenMode.ACTIVE -> { {} }
+    }
+    Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+        DuoTile(
+            "🎧", listenTitle, listenSubtitle, listOf(Color(0xFF7B5CFF), Color(0xFF36C2F5)),
+            spinning = listen.active, onClick = onListen, modifier = Modifier.weight(1f),
+        )
+        DuoTile(
+            "💌", "Dedicar", "Una canción con mensaje", listOf(THREAD_RED, WARM),
+            spinning = false, onClick = onDedicate, modifier = Modifier.weight(1f),
         )
     }
 }
 
-/** Escuchar juntos: invitar, unirse, tomar el control o salir. */
+/** Tarjeta grande con degradado que se hunde un poco al presionarla. */
 @Composable
-private fun ListenCard(vm: TogetherViewModel, partner: PartnerInfo, player: PlayerState?, save: SaveAction?) {
-    val listen by vm.listen.collectAsStateWithLifecycle()
+private fun DuoTile(
+    emoji: String,
+    title: String,
+    subtitle: String,
+    colors: List<Color>,
+    spinning: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val style = LocalAppStyle.current
+    val interaction = remember { MutableInteractionSource() }
+    val pressed by interaction.collectIsPressedAsState()
+    val scale by animateFloatAsState(if (pressed) 0.95f else 1f, spring(dampingRatio = 0.5f), label = "tile")
+    val spin by rememberInfiniteTransition(label = "spin").animateFloat(
+        0f, 360f, infiniteRepeatable(tween(4000, easing = LinearEasing)), label = "spin",
+    )
+    Box(
+        modifier
+            .height(136.dp)
+            .scale(scale)
+            .shadow(8.dp, style.cardShape, ambientColor = colors.first(), spotColor = colors.first())
+            .clip(style.cardShape)
+            .background(Brush.linearGradient(colors))
+            .clickable(interactionSource = interaction, indication = null, onClick = onClick)
+            .padding(16.dp),
+    ) {
+        Text(emoji, fontSize = 34.sp, modifier = Modifier.rotate(if (spinning) spin else -8f))
+        Column(Modifier.align(Alignment.BottomStart)) {
+            Text(title, color = Color.White, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+            Text(
+                subtitle, color = Color.White.copy(alpha = 0.88f), style = MaterialTheme.typography.bodySmall,
+                maxLines = 2, overflow = TextOverflow.Ellipsis,
+            )
+        }
+    }
+}
+
+/** Invitación recibida o sesión activa de escuchar juntos. */
+@Composable
+private fun ListenCard(vm: TogetherViewModel, partner: PartnerInfo, listen: ListenSession, player: PlayerState?, save: SaveAction?) {
     val name = partner.displayName
     when (listen.mode) {
-        ListenMode.NONE -> InfoCard(
-            "Escuchar juntos 🎧",
-            "Lo que suene en tu celular sonará en el de $name, al mismo tiempo. Pueden turnarse el control.",
-        ) {
-            PillButton(
-                "Invitar a $name", Icons.Default.Headphones, vm::inviteListen, Modifier.fillMaxWidth(),
-            )
-            if (!partner.online) {
-                Spacer(Modifier.height(8.dp))
-                Text("$name debe tener Minu abierta para unirse.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            }
-        }
-        ListenMode.INVITING -> InfoCard("Esperando a $name…", "Le llegó tu invitación para escuchar juntos.") {
-            TextButton(onClick = vm::leaveListen) { Text("Cancelar") }
-        }
         ListenMode.INVITED -> InfoCard("$name te invita a escuchar juntos 🎧", "Escucharás lo mismo que suena en su celular.") {
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 PillButton("Unirme", Icons.Default.Headphones, vm::acceptListen, Modifier.weight(1f))
@@ -291,8 +367,8 @@ private fun ListenCard(vm: TogetherViewModel, partner: PartnerInfo, player: Play
         }
         ListenMode.ACTIVE -> InfoCard(
             "Escuchando juntos 🎶",
-            if (listen.iAmDj) "Tú controlas la música: lo que pongas suena en el celular de $name."
-            else "$name controla la música. Puedes reaccionar o tomar el control.",
+            if (listen.iAmDj) "Lo que pongas suena en el celular de $name. El hilo vibra con la música."
+            else "$name pone la música. Puedes reaccionar o tomar el control.",
         ) {
             if (player != null && save != null) {
                 ListenNowPlaying(player, save, invite = !listen.iAmDj)
@@ -303,6 +379,7 @@ private fun ListenCard(vm: TogetherViewModel, partner: PartnerInfo, player: Play
                 PillButton("Salir", Icons.Default.LinkOff, vm::leaveListen, Modifier.weight(1f), primary = false)
             }
         }
+        else -> Unit
     }
 }
 
@@ -332,8 +409,8 @@ private fun ListenNowPlaying(player: PlayerState, save: SaveAction, invite: Bool
             }
             Text(
                 when {
-                    save.saved -> "En tu biblioteca · toca para otra playlist"
-                    invite -> "¿Te gusta? Guárdala en una playlist"
+                    save.saved -> "En tu biblioteca · toca para otro álbum"
+                    invite -> "¿Te gusta? Guárdala en un álbum"
                     else -> player.metadata.artist?.toString().orEmpty()
                 },
                 style = MaterialTheme.typography.bodySmall, maxLines = 1, overflow = TextOverflow.Ellipsis,
@@ -344,66 +421,228 @@ private fun ListenNowPlaying(player: PlayerState, save: SaveAction, invite: Bool
     }
 }
 
+/** Emojis que se tocan o se lanzan hacia arriba: salen volando y viajan por el hilo. */
 @Composable
-private fun ReactionRow(vm: TogetherViewModel) {
+private fun ReactionTray(partner: PartnerInfo, onSend: (String) -> Unit) {
+    val style = LocalAppStyle.current
     Column {
-        Text(LocalAppStyle.current.label("Mándale una reacción"), style = MaterialTheme.typography.titleMedium)
-        Spacer(Modifier.height(8.dp))
-        LazyRow(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            items(TogetherViewModel.EMOJIS) { emoji ->
-                Box(
-                    Modifier.size(52.dp).clip(CircleShape).background(MaterialTheme.colorScheme.surfaceContainerHigh)
-                        .clickable { vm.sendLiveReaction(emoji) },
-                    contentAlignment = Alignment.Center,
-                ) { Text(emoji, fontSize = 24.sp) }
-            }
+        Text(style.label("Lanza un detalle"), style = MaterialTheme.typography.titleMedium)
+        Text(
+            if (partner.online) "Toca o desliza hacia arriba: le llega al instante."
+            else "${partner.displayName} no tiene Minu abierta: lo verá cuando esté en línea contigo.",
+            style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Spacer(Modifier.height(6.dp))
+        LazyRow(
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+            contentPadding = PaddingValues(vertical = 10.dp),
+        ) {
+            items(TogetherViewModel.LIVE_EMOJIS) { emoji -> FlickEmoji(emoji, onSend) }
         }
     }
 }
 
 @Composable
-private fun DedicationCard(d: Dedication, vm: TogetherViewModel) {
+private fun FlickEmoji(emoji: String, onSend: (String) -> Unit) {
     val c = MaterialTheme.colorScheme
-    val style = LocalAppStyle.current
-    Surface(color = c.surfaceContainer, shape = style.cardShape, modifier = Modifier.fillMaxWidth()) {
-        Column(Modifier.padding(16.dp)) {
-            Text(
-                if (d.incoming) "${d.fromName} te dedicó" else "Le dedicaste",
-                style = MaterialTheme.typography.labelLarge, color = c.primary,
-            )
-            Spacer(Modifier.height(8.dp))
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                ArtworkImage(d.song.thumbnailUrl, Modifier.size(56.dp))
-                Spacer(Modifier.width(12.dp))
-                Column(Modifier.weight(1f)) {
-                    Text(d.song.title, style = MaterialTheme.typography.titleMedium, maxLines = 2, overflow = TextOverflow.Ellipsis)
-                    Text(d.song.uploader, style = MaterialTheme.typography.bodySmall, color = c.onSurfaceVariant, maxLines = 1)
+    val scope = rememberCoroutineScope()
+    val haptics = LocalHapticFeedback.current
+    val send by rememberUpdatedState(onSend)
+    val launchPx = with(LocalDensity.current) { 34.dp.toPx() }
+    var dy by remember { mutableFloatStateOf(0f) }
+    fun settle(flung: Boolean) {
+        scope.launch {
+            if (flung) {
+                animate(dy, -launchPx * 4f, animationSpec = tween(180)) { v, _ -> dy = v }
+                dy = launchPx * 0.6f // reaparece desde abajo
+            }
+            animate(dy, 0f, animationSpec = spring(dampingRatio = 0.45f)) { v, _ -> dy = v }
+        }
+    }
+    Box(
+        Modifier
+            .size(54.dp)
+            .graphicsLayer {
+                translationY = dy
+                val lift = (-dy / launchPx).coerceIn(0f, 1f)
+                scaleX = 1f + lift * 0.3f
+                scaleY = 1f + lift * 0.3f
+                alpha = 1f - ((-dy - launchPx * 1.5f) / (launchPx * 2.5f)).coerceIn(0f, 1f)
+            }
+            .clip(CircleShape)
+            .background(c.surfaceContainerHigh)
+            .border(1.dp, THREAD_RED.copy(alpha = 0.18f), CircleShape)
+            .pointerInput(emoji) {
+                detectVerticalDragGestures(
+                    onDragEnd = {
+                        val flung = dy < -launchPx
+                        if (flung) {
+                            haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                            send(emoji)
+                        }
+                        settle(flung)
+                    },
+                    onDragCancel = { settle(false) },
+                ) { change, amount ->
+                    change.consume()
+                    dy = (dy + amount).coerceIn(-launchPx * 2f, launchPx * 0.4f)
                 }
-                IconButton(onClick = { vm.play(d) }) { Icon(Icons.Default.PlayArrow, "Reproducir", tint = c.primary) }
             }
-            if (d.message.isNotBlank()) {
-                Spacer(Modifier.height(10.dp))
-                Text("“${d.message}”", style = MaterialTheme.typography.bodyLarge.copy(fontStyle = FontStyle.Italic))
-            }
-            Spacer(Modifier.height(10.dp))
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(
-                    DateFormat.getDateTimeInstance(DateFormat.SHORT, DateFormat.SHORT).format(Date(d.createdAt)) +
-                        if (!d.incoming && d.seenAt != null) " · Visto ✓✓" else "",
-                    style = MaterialTheme.typography.bodySmall, color = c.onSurfaceVariant, modifier = Modifier.weight(1f),
-                )
-                Text(d.reactions.takeLast(6).joinToString("") { it.emoji }, fontSize = 18.sp)
-            }
-            AnimatedVisibility(d.incoming) {
-                Row(Modifier.padding(top = 8.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    TogetherViewModel.EMOJIS.take(4).forEach { emoji ->
+            .clickable {
+                haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                send(emoji)
+                scope.launch {
+                    animate(0f, -launchPx * 0.5f, animationSpec = tween(90)) { v, _ -> dy = v }
+                    animate(dy, 0f, animationSpec = spring(dampingRatio = 0.35f)) { v, _ -> dy = v }
+                }
+            },
+        contentAlignment = Alignment.Center,
+    ) { Text(emoji, fontSize = 26.sp) }
+}
+
+@Composable
+private fun LettersHeader(count: Int) {
+    Row(verticalAlignment = Alignment.Bottom) {
+        Text(LocalAppStyle.current.label("Cartas"), style = MaterialTheme.typography.titleLarge, modifier = Modifier.weight(1f))
+        if (count > 0) {
+            Text(
+                "Toca dos veces una carta para mandarle ❤️",
+                style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+    }
+}
+
+/**
+ * Una dedicatoria como carta de correo aéreo: papel, borde de rayas, la portada como estampilla y el
+ * mensaje a mano. Las que recibes van a la izquierda y las que mandas a la derecha, un poco ladeadas.
+ */
+@Composable
+private fun LetterCard(d: Dedication, index: Int, partnerName: String, vm: TogetherViewModel) {
+    val style = LocalAppStyle.current
+    val dark = style.isDark
+    val paper = if (dark) Color(0xFF2B2327) else Color(0xFFFFF7EC)
+    val ink = if (dark) Color(0xFFF5E7EA) else Color(0xFF3B2A2F)
+    val faded = ink.copy(alpha = 0.65f)
+    val shape = RoundedCornerShape(10.dp)
+    val tilt = if (index % 2 == 0) -1.2f else 1.2f
+    val scope = rememberCoroutineScope()
+    val haptics = LocalHapticFeedback.current
+    val pop = remember { Animatable(0f) }
+
+    Box(Modifier.fillMaxWidth(), contentAlignment = if (d.incoming) Alignment.TopStart else Alignment.TopEnd) {
+        Box(Modifier.fillMaxWidth(0.94f).rotate(tilt)) {
+            Column(
+                Modifier
+                    .fillMaxWidth()
+                    .shadow(6.dp, shape)
+                    .clip(shape)
+                    .background(paper)
+                    .pointerInput(d.id) {
+                        detectTapGestures(onDoubleTap = {
+                            haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                            vm.react(d, "❤️")
+                            scope.launch {
+                                pop.snapTo(0.01f)
+                                pop.animateTo(1f, tween(700))
+                                pop.snapTo(0f)
+                            }
+                        })
+                    },
+            ) {
+                AirmailStripe()
+                Column(Modifier.padding(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 12.dp)) {
+                    Row(verticalAlignment = Alignment.Top) {
+                        Column(Modifier.weight(1f)) {
+                            Text(
+                                if (d.incoming) "De ${d.fromName}, para ti" else "Para $partnerName",
+                                style = MaterialTheme.typography.labelLarge, color = THREAD_RED,
+                            )
+                            Spacer(Modifier.height(6.dp))
+                            Text(
+                                d.song.title, style = MaterialTheme.typography.titleMedium, color = ink,
+                                maxLines = 2, overflow = TextOverflow.Ellipsis,
+                            )
+                            Text(d.song.uploader, style = MaterialTheme.typography.bodySmall, color = faded, maxLines = 1)
+                        }
+                        Spacer(Modifier.width(10.dp))
+                        // La portada como estampilla
+                        Box(
+                            Modifier.rotate(5f).background(Color.White, RoundedCornerShape(3.dp)).padding(3.dp),
+                        ) {
+                            ArtworkImage(d.song.thumbnailUrl, Modifier.size(58.dp), RoundedCornerShape(2.dp))
+                        }
+                    }
+                    if (d.message.isNotBlank()) {
+                        Spacer(Modifier.height(12.dp))
                         Text(
-                            emoji, fontSize = 22.sp,
-                            modifier = Modifier.clip(CircleShape).clickable { vm.react(d, emoji) }.padding(6.dp),
+                            "“${d.message}”", color = ink, fontFamily = FontFamily.Cursive, fontSize = 21.sp,
+                            lineHeight = 26.sp,
                         )
+                    }
+                    Spacer(Modifier.height(10.dp))
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Column(Modifier.weight(1f)) {
+                            Text(
+                                DateFormat.getDateTimeInstance(DateFormat.SHORT, DateFormat.SHORT).format(Date(d.createdAt)) +
+                                    if (!d.incoming && d.seenAt != null) " · Vista ✓✓" else "",
+                                style = MaterialTheme.typography.bodySmall, color = faded,
+                            )
+                            val reactions = d.reactions.takeLast(6).joinToString("") { it.emoji }
+                            if (reactions.isNotEmpty()) Text(reactions, fontSize = 18.sp)
+                        }
+                        IconButton(
+                            onClick = { vm.play(d) },
+                            modifier = Modifier.size(44.dp).clip(CircleShape).background(THREAD_RED),
+                        ) { Icon(Icons.Default.PlayArrow, "Reproducir", tint = Color.White) }
+                    }
+                    if (d.incoming) {
+                        Row(Modifier.padding(top = 6.dp), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                            TogetherViewModel.EMOJIS.take(5).forEach { emoji ->
+                                Text(
+                                    emoji, fontSize = 20.sp,
+                                    modifier = Modifier.clip(CircleShape).clickable { vm.react(d, emoji) }.padding(6.dp),
+                                )
+                            }
+                        }
                     }
                 }
             }
+            // Corazón que aparece al tocar dos veces
+            if (pop.value > 0f) {
+                val p = pop.value
+                Text(
+                    "❤️", fontSize = 72.sp,
+                    modifier = Modifier.align(Alignment.Center).graphicsLayer {
+                        val s = 0.4f + 0.9f * (1f - (1f - p) * (1f - p))
+                        scaleX = s; scaleY = s
+                        alpha = if (p < 0.7f) 1f else (1f - p) / 0.3f
+                    },
+                )
+            }
+        }
+    }
+}
+
+/** Borde de rayas rojas y azules de las cartas de correo aéreo. */
+@Composable
+private fun AirmailStripe() {
+    Canvas(Modifier.fillMaxWidth().height(7.dp)) {
+        val w = 12.dp.toPx()
+        val h = size.height
+        var x = -h
+        var i = 0
+        while (x < size.width) {
+            val stripe = Path().apply {
+                moveTo(x, h)
+                lineTo(x + h, 0f)
+                lineTo(x + h + w, 0f)
+                lineTo(x + w, h)
+                close()
+            }
+            drawPath(stripe, if (i % 2 == 0) THREAD_RED else AIRMAIL_BLUE)
+            x += w * 2f
+            i++
         }
     }
 }
