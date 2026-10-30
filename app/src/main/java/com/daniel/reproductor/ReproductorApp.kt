@@ -15,6 +15,7 @@ import com.daniel.reproductor.data.MusicFiles
 import com.daniel.reproductor.data.MusicRepository
 import com.daniel.reproductor.data.NetworkMonitor
 import com.daniel.reproductor.data.db.AppDatabase
+import com.daniel.reproductor.data.download.DownloadStorage
 import com.daniel.reproductor.data.remote.ExtractorUpdateChecker
 import com.daniel.reproductor.data.remote.OkHttpDownloader
 import com.daniel.reproductor.data.remote.YouTubeResolver
@@ -45,8 +46,11 @@ class ReproductorApp : Application() {
     val updateChecker: ExtractorUpdateChecker by lazy {
         ExtractorUpdateChecker(this, okHttpClient, BuildConfig.NEWPIPE_VERSION)
     }
+    val downloads: DownloadStorage by lazy {
+        DownloadStorage(this, database.musicDao(), files, settings) { WorkManager.getInstance(this) }
+    }
     val repository: MusicRepository by lazy {
-        MusicRepository(database.musicDao(), resolver, files, { WorkManager.getInstance(this) }, settings)
+        MusicRepository(database.musicDao(), resolver, downloads, { WorkManager.getInstance(this) }, settings)
     }
 
     // Nube y "Juntos"

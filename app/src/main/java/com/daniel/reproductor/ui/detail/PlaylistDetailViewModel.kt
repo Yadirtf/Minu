@@ -61,7 +61,7 @@ class PlaylistDetailViewModel(
 
     fun thumbnail(song: Song): Any = files.thumbnailFor(song)
 
-    fun download(song: Song) = viewModelScope.launch { repo.download(song.videoId) }
+    fun download(song: Song) = viewModelScope.launch { repo.download(song.videoId, playlistId) }
 
     fun deleteDownload(song: Song) = viewModelScope.launch {
         repo.deleteDownload(song.videoId)

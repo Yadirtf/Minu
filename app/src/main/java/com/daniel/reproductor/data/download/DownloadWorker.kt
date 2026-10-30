@@ -13,7 +13,10 @@ import kotlinx.coroutines.withContext
 import okhttp3.Request
 import java.io.IOException
 
-/** Resuelve el stream, descarga el audio y la miniatura, y actualiza localPath/downloadState. */
+/**
+ * Resuelve el stream, descarga el audio y la miniatura, y actualiza localPath/downloadState.
+ * El archivo se baja a la memoria de la app y al terminar [DownloadStorage] lo lleva a su lugar.
+ */
 class DownloadWorker(context: Context, params: WorkerParameters) : CoroutineWorker(context, params) {
 
     private val app = context.applicationContext as ReproductorApp
@@ -31,7 +34,6 @@ class DownloadWorker(context: Context, params: WorkerParameters) : CoroutineWork
             val extension = audio.format?.suffix ?: "m4a"
 
             val partial = app.files.partialFile(videoId)
-            val target = app.files.audioFile(videoId, extension)
             withContext(Dispatchers.IO) {
                 RangeDownloader(app.okHttpClient, OkHttpDownloader.USER_AGENT)
                     .download(audio.content, partial) { done, total ->
@@ -40,10 +42,10 @@ class DownloadWorker(context: Context, params: WorkerParameters) : CoroutineWork
                         setProgressAsync(workDataOf(KEY_PROGRESS to percent, KEY_VIDEO_ID to videoId))
                     }
                 if (isStopped) throw CancellationException("Descarga cancelada")
-                if (!partial.renameTo(target)) throw IOException("No se pudo guardar el archivo")
                 downloadThumbnail(song.thumbnailUrl, videoId)
             }
-            dao.setDownloaded(videoId, target.absolutePath)
+            val playlistId = inputData.getLong(KEY_PLAYLIST_ID, NO_PLAYLIST).takeIf { it != NO_PLAYLIST }
+            dao.setDownloaded(videoId, app.downloads.store(song, partial, extension, playlistId))
             Result.success()
         } catch (e: CancellationException) {
             throw e
@@ -73,6 +75,9 @@ class DownloadWorker(context: Context, params: WorkerParameters) : CoroutineWork
 
     companion object {
         const val KEY_VIDEO_ID = "videoId"
+        /** Playlist desde la que se pidió la descarga: su carpeta es donde se guarda. */
+        const val KEY_PLAYLIST_ID = "playlistId"
+        const val NO_PLAYLIST = -1L
         const val KEY_PROGRESS = "progress"
         const val TAG = "download"
         private const val MAX_RETRIES = 3
