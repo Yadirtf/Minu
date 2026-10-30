@@ -14,6 +14,7 @@ import androidx.work.WorkInfo
 import androidx.work.WorkManager
 import androidx.work.workDataOf
 import com.daniel.reproductor.data.db.DownloadState
+import com.daniel.reproductor.data.download.DownloadStorage
 import com.daniel.reproductor.data.download.DownloadWorker
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
@@ -32,7 +33,7 @@ class UserFacingException(message: String, cause: Throwable? = null) : Exception
 class MusicRepository(
     private val dao: MusicDao,
     private val resolver: YouTubeResolver,
-    private val files: MusicFiles,
+    private val storage: DownloadStorage,
     private val workManager: () -> WorkManager, // diferido: se pide solo al usarlo
     private val settings: AppSettings,
 ) {
@@ -55,36 +56,52 @@ class MusicRepository(
 
     suspend fun getPlaylists(): List<Playlist> = dao.getPlaylists()
     suspend fun getSong(videoId: String): Song? = dao.getSong(videoId)
-    suspend fun createPlaylist(name: String): Long = dao.insertPlaylist(Playlist(name = name.trim()))
-    suspend fun renamePlaylist(id: Long, name: String) = dao.renamePlaylist(id, name.trim())
+    suspend fun createPlaylist(name: String): Long =
+        dao.insertPlaylist(Playlist(name = name.trim())).also { storage.schedule() } // crea su carpeta
+
+    suspend fun renamePlaylist(id: Long, name: String) {
+        val old = dao.getPlaylist(id)?.name ?: return
+        dao.renamePlaylist(id, name.trim())
+        if (old != name.trim()) storage.schedule(renamed = mapOf(old to name.trim()))
+    }
 
     suspend fun deletePlaylist(id: Long) {
+        val name = dao.getPlaylist(id)?.name
         dao.deletePlaylist(id)
         deleteOrphans()
+        // Las canciones que siguen en otra playlist se mudan a su carpeta.
+        storage.schedule(removed = listOfNotNull(name))
     }
 
     suspend fun removeFromPlaylist(playlistId: Long, videoId: String) {
         dao.removeFromPlaylist(playlistId, videoId)
         deleteOrphans()
+        storage.schedule()
     }
 
     /** Borra las canciones (y sus descargas) que ya no están en ninguna playlist. */
     private suspend fun deleteOrphans() {
         for (song in dao.getOrphanSongs()) {
             workManager().cancelUniqueWork(DownloadWorker.uniqueName(song.videoId))
-            files.deleteFor(song)
+            storage.deleteFor(song)
             dao.deleteSong(song.videoId)
         }
     }
 
     // --- Descargas ---
 
-    suspend fun download(videoId: String) {
+    /** [playlistId]: desde qué playlist se pidió; la canción se guarda en su carpeta. */
+    suspend fun download(videoId: String, playlistId: Long? = null) {
         val song = dao.getSong(videoId) ?: return
         if (song.downloadState == DownloadState.DONE) return
         val network = if (settings.wifiOnly.value) NetworkType.UNMETERED else NetworkType.CONNECTED
         val request = OneTimeWorkRequestBuilder<DownloadWorker>()
-            .setInputData(workDataOf(DownloadWorker.KEY_VIDEO_ID to videoId))
+            .setInputData(
+                workDataOf(
+                    DownloadWorker.KEY_VIDEO_ID to videoId,
+                    DownloadWorker.KEY_PLAYLIST_ID to (playlistId ?: DownloadWorker.NO_PLAYLIST),
+                )
+            )
             .setConstraints(Constraints(requiredNetworkType = network, requiresStorageNotLow = true))
             .setBackoffCriteria(BackoffPolicy.EXPONENTIAL, 15, TimeUnit.SECONDS)
             .addTag(DownloadWorker.TAG)
@@ -97,13 +114,13 @@ class MusicRepository(
         val pending = dao.getSongs(playlistId).filter {
             it.downloadState != DownloadState.DONE && it.downloadState != DownloadState.DOWNLOADING
         }
-        pending.forEach { download(it.videoId) }
+        pending.forEach { download(it.videoId, playlistId) }
         return pending.size
     }
 
     suspend fun deleteDownload(videoId: String) {
         workManager().cancelUniqueWork(DownloadWorker.uniqueName(videoId))
-        dao.getSong(videoId)?.let(files::deleteFor)
+        dao.getSong(videoId)?.let { storage.deleteFor(it) }
         dao.clearDownload(videoId)
     }
 
@@ -170,7 +187,7 @@ class MusicRepository(
      * Une playlists con las locales (misma playlist = mismo uid, o mismo nombre en respaldos viejos)
      * y agrega las canciones que falten. No borra nada.
      */
-    suspend fun mergeEntries(entries: List<PlaylistBackup.Entry>) {
+    suspend fun mergeEntries(entries: List<PlaylistBackup.Entry>) = trackingFolders {
         for (entry in entries) {
             val existing = dao.findPlaylistByUid(entry.uid) ?: dao.findPlaylistByName(entry.name)
             val id = existing?.id ?: dao.insertPlaylist(Playlist(name = entry.name, createdAt = entry.createdAt, uid = entry.uid))
@@ -182,9 +199,23 @@ class MusicRepository(
     }
 
     /** Deja la biblioteca exactamente como la copia de la nube (conserva las descargas que sigan en uso). */
-    suspend fun replaceWithEntries(entries: List<PlaylistBackup.Entry>) {
+    suspend fun replaceWithEntries(entries: List<PlaylistBackup.Entry>) = trackingFolders {
         dao.applySnapshot(entries)
         deleteOrphans()
+    }
+
+    /**
+     * Para cambios que llegan en bloque (nube, respaldo): compara las playlists antes y después y
+     * avisa a [storage] qué se renombró o borró, para que las carpetas sigan los cambios.
+     */
+    private suspend fun trackingFolders(change: suspend () -> Unit) {
+        val before = dao.getPlaylists().associate { it.uid to it.name }
+        change()
+        val after = dao.getPlaylists().associate { it.uid to it.name }
+        storage.schedule(
+            renamed = before.filter { (uid, name) -> after[uid] != null && after[uid] != name }.map { (uid, name) -> name to after.getValue(uid) }.toMap(),
+            removed = before.filterKeys { it !in after }.values,
+        )
     }
 
     private suspend fun resolveSong(videoId: String): Song {

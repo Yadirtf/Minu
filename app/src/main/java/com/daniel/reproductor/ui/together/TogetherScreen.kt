@@ -77,6 +77,7 @@ import com.daniel.reproductor.ui.library.SaveToPlaylistButton
 import com.daniel.reproductor.ui.library.SaveToPlaylistHost
 import com.daniel.reproductor.ui.library.rememberSaveToPlaylistState
 import com.daniel.reproductor.ui.player.PlayerState
+import com.daniel.reproductor.ui.profile.ProfileButton
 import com.daniel.reproductor.ui.theme.LocalAppStyle
 import java.text.DateFormat
 import java.util.Date
@@ -103,7 +104,12 @@ fun TogetherScreen(vm: TogetherViewModel, lib: LibraryViewModel, player: PlayerS
         ),
         verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
-        item { ScreenTitle("Juntos", subtitle = "Tu música, compartida") }
+        item {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                ProfileButton(Modifier.padding(end = 14.dp))
+                ScreenTitle("Juntos", subtitle = "Tu música, compartida")
+            }
+        }
         if (busy) item { LinearProgressIndicator(Modifier.fillMaxWidth()) }
 
         val user = account

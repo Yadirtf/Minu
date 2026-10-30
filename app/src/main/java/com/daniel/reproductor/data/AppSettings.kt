@@ -1,6 +1,7 @@
 package com.daniel.reproductor.data
 
 import android.content.Context
+import android.net.Uri
 import androidx.core.content.edit
 import com.daniel.reproductor.ui.theme.StyleId
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -18,6 +19,15 @@ class AppSettings(context: Context) {
     )
     val style: StateFlow<StyleId> = _style.asStateFlow()
 
+    /** Carpeta del dispositivo elegida para las descargas, o null para la memoria privada de la app. */
+    private val _downloadTree = MutableStateFlow(prefs.getString(KEY_DOWNLOAD_TREE, null)?.let(Uri::parse))
+    val downloadTree: StateFlow<Uri?> = _downloadTree.asStateFlow()
+
+    fun setDownloadTree(value: Uri?) {
+        prefs.edit { if (value == null) remove(KEY_DOWNLOAD_TREE) else putString(KEY_DOWNLOAD_TREE, value.toString()) }
+        _downloadTree.value = value
+    }
+
     fun setWifiOnly(value: Boolean) {
         prefs.edit { putBoolean(KEY_WIFI_ONLY, value) }
         _wifiOnly.value = value
@@ -31,5 +41,6 @@ class AppSettings(context: Context) {
     private companion object {
         const val KEY_WIFI_ONLY = "wifi_only"
         const val KEY_STYLE = "style"
+        const val KEY_DOWNLOAD_TREE = "download_tree"
     }
 }

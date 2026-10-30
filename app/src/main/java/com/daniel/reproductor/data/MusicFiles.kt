@@ -5,7 +5,7 @@ import com.daniel.reproductor.data.db.DownloadState
 import com.daniel.reproductor.data.db.Song
 import java.io.File
 
-/** Archivos descargados en el almacenamiento interno de la app (no requiere permisos). */
+/** Archivos en el almacenamiento interno de la app (no requiere permisos): descargas en curso, miniaturas y audio si no se eligió carpeta. */
 class MusicFiles(context: Context) {
     val musicDir = File(context.filesDir, "music").apply { mkdirs() }
     val thumbsDir = File(context.filesDir, "thumbs").apply { mkdirs() }
@@ -23,9 +23,9 @@ class MusicFiles(context: Context) {
         return song.thumbnailUrl
     }
 
-    fun deleteFor(song: Song) {
-        song.localPath?.let { File(it).delete() }
-        partialFile(song.videoId).delete()
-        thumbFile(song.videoId).delete()
+    /** Descarga a medias y miniatura. El audio terminado lo borra [DownloadStorage][com.daniel.reproductor.data.download.DownloadStorage]. */
+    fun deleteExtras(videoId: String) {
+        partialFile(videoId).delete()
+        thumbFile(videoId).delete()
     }
 }

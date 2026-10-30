@@ -28,7 +28,6 @@ import com.daniel.reproductor.data.remote.YouTubeResolver
 import com.google.common.util.concurrent.Futures
 import com.google.common.util.concurrent.ListenableFuture
 import kotlinx.coroutines.runBlocking
-import java.io.File
 import java.io.IOException
 import java.util.concurrent.ConcurrentHashMap
 
@@ -85,10 +84,7 @@ class PlaybackService : MediaSessionService() {
         val videoId = PlaybackItems.videoIdFromUri(spec.uri) ?: return spec
 
         val song = runBlocking { app.repository.getSong(videoId) }
-        val localPath = song?.localPath
-        if (localPath != null && File(localPath).exists()) {
-            return spec.withUri(Uri.fromFile(File(localPath)))
-        }
+        song?.localPath?.let(app.downloads::playableUri)?.let { return spec.withUri(it) }
 
         val cached = urlCache[videoId]?.takeIf { System.currentTimeMillis() < it.second }?.first
         val url = cached ?: try {

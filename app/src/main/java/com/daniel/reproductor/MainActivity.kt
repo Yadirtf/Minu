@@ -29,20 +29,29 @@ import androidx.compose.foundation.layout.consumeWindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.rememberPagerState
+import androidx.compose.material3.DrawerValue
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalNavigationDrawer
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.rememberDrawerState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -60,6 +69,10 @@ import com.daniel.reproductor.ui.player.PlayerState
 import com.daniel.reproductor.ui.player.rememberMediaController
 import com.daniel.reproductor.ui.player.rememberPlayerState
 import com.daniel.reproductor.ui.playlists.PlaylistsScreen
+import com.daniel.reproductor.ui.profile.LocalProfileEntry
+import com.daniel.reproductor.ui.profile.ProfileDrawer
+import com.daniel.reproductor.ui.profile.ProfileEntry
+import com.daniel.reproductor.ui.profile.ProfileSummary
 import com.daniel.reproductor.ui.resolver.ResolverScreen
 import com.daniel.reproductor.ui.search.SearchScreen
 import com.daniel.reproductor.ui.settings.SettingsSheet
@@ -79,6 +92,7 @@ import com.daniel.reproductor.ui.together.ListenBanner
 import com.daniel.reproductor.ui.together.TogetherScreen
 import com.daniel.reproductor.ui.together.TogetherViewModel
 import androidx.compose.ui.platform.LocalContext
+import kotlinx.coroutines.launch
 
 class MainActivity : ComponentActivity() {
     override fun onNewIntent(intent: Intent) {
@@ -135,6 +149,7 @@ private fun RequestNotificationPermission() {
 }
 
 private const val NONE = -1L
+private const val TABS = "tabs"
 
 @Composable
 internal fun AppRoot(
@@ -145,7 +160,13 @@ internal fun AppRoot(
 ) {
     val app = LocalContext.current.applicationContext as ReproductorApp
     val hub = app.partnerHub
-    var tab by rememberSaveable { mutableStateOf(Tab.HOME) }
+    // Las pestañas viven en un pager: se cambia deslizando o con la barra inferior, y ambos quedan sincronizados
+    val pager = rememberPagerState(initialPage = Tab.HOME.ordinal) { Tab.entries.size }
+    // targetPage, no currentPage: la barra resalta el destino apenas el dedo pasa la mitad, como en WhatsApp
+    val tab = Tab.entries[pager.targetPage]
+    val drawer = rememberDrawerState(DrawerValue.Closed)
+    val scope = rememberCoroutineScope()
+    val focusManager = LocalFocusManager.current
     var openPlaylist by rememberSaveable { mutableLongStateOf(NONE) }
     var searchInPlaylist by rememberSaveable { mutableLongStateOf(NONE) }
     var searchInPlaylistName by rememberSaveable { mutableStateOf("") }
@@ -158,6 +179,7 @@ internal fun AppRoot(
     val partner by together.partner.collectAsStateWithLifecycle()
     val dedications by together.dedications.collectAsStateWithLifecycle()
     val partnerName = partner?.partner?.displayName.orEmpty()
+    val account by together.account.collectAsStateWithLifecycle()
     // Dedicatorias recibidas que todavía no se han visto
     var liveDedicationId by remember { mutableStateOf<String?>(null) }
     val pending = dedications.firstOrNull { it.incoming && it.seenAt == null }
@@ -178,58 +200,92 @@ internal fun AppRoot(
             }
         }
     }
+    // Al cambiar de pestaña se cierra el teclado que haya quedado abierto en Buscar
+    LaunchedEffect(pager) { snapshotFlow { pager.currentPage }.collect { focusManager.clearFocus() } }
     // Mientras sigues la música de tu pareja, tus controles quedan en pausa
     LaunchedEffect(player) {
         player?.lockedReason = hub::lockedReason
         player?.onLocked = { msg -> lib.message(msg) }
     }
 
-    // Atrás: cierra capas en orden y al final vuelve a Inicio
+    fun goTo(target: Tab) {
+        openPlaylist = NONE
+        searchInPlaylist = NONE
+        scope.launch { pager.animateScrollToPage(target.ordinal) }
+    }
+    fun closeDrawerThen(action: () -> Unit) {
+        action()
+        scope.launch { drawer.close() }
+    }
+
+    val profile = remember(account, partner) {
+        ProfileSummary(
+            displayName = account?.displayName,
+            partnerName = partner?.partner?.displayName,
+            partnerOnline = partner?.partner?.online == true,
+        )
+    }
+    val profileEntry = remember(profile) { ProfileEntry(profile) { scope.launch { drawer.open() } } }
+
+    // Atrás: cierra capas en orden y al final vuelve a Inicio (el último registrado tiene prioridad)
     BackHandler(enabled = searchInPlaylist != NONE) { searchInPlaylist = NONE }
     BackHandler(enabled = searchInPlaylist == NONE && openPlaylist != NONE) { openPlaylist = NONE }
-    BackHandler(enabled = openPlaylist == NONE && tab != Tab.HOME) { tab = Tab.HOME }
+    BackHandler(enabled = openPlaylist == NONE && tab != Tab.HOME) { goTo(Tab.HOME) }
+    BackHandler(enabled = drawer.isOpen) { scope.launch { drawer.close() } }
 
     val hasMedia = player != null && player.hasMedia
     val screenKey = when {
         searchInPlaylist != NONE -> "search-$searchInPlaylist"
         openPlaylist != NONE -> "playlist-$openPlaylist"
-        else -> tab.name
+        else -> TABS
     }
 
     Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
-        Column(Modifier.fillMaxSize()) {
-            Box(Modifier.weight(1f).consumeWindowInsets(WindowInsets.navigationBars)) {
-                Crossfade(screenKey, animationSpec = tween(220), label = "screens") { key ->
-                    when {
-                        key.startsWith("search-") -> SearchScreen(
-                            lib = lib, player = player,
-                            targetPlaylist = searchInPlaylist to searchInPlaylistName,
-                            onBack = { searchInPlaylist = NONE },
-                        )
-                        key.startsWith("playlist-") -> PlaylistDetailScreen(
-                            playlistId = openPlaylist, lib = lib, player = player,
-                            onBack = { openPlaylist = NONE },
-                            onSearch = { name -> searchInPlaylistName = name; searchInPlaylist = openPlaylist },
-                        )
-                        key == Tab.PLAYLISTS.name -> PlaylistsScreen(lib, onOpenPlaylist = { openPlaylist = it })
-                        key == Tab.SEARCH.name -> SearchScreen(lib = lib, player = player)
-                        key == Tab.TOGETHER.name -> TogetherScreen(together, lib, player, onOpenAccount = { showAccount = true })
-                        else -> HomeScreen(
-                            lib = lib, settings = settings, player = player,
-                            onOpenStyles = { showStyles = true },
-                            onOpenSettings = { showSettings = true },
-                        )
+        // El panel solo se arrastra para cerrarlo: abrirlo deslizando chocaría con el cambio de pestañas
+        ModalNavigationDrawer(
+            drawerState = drawer,
+            gesturesEnabled = drawer.isOpen,
+            drawerContent = {
+                ProfileDrawer(
+                    summary = profile,
+                    onViewProfile = { closeDrawerThen { showAccount = true } },
+                    onOpenThemes = { closeDrawerThen { showStyles = true } },
+                    onOpenSettings = { closeDrawerThen { showSettings = true } },
+                )
+            },
+        ) {
+            Column(Modifier.fillMaxSize()) {
+                Box(Modifier.weight(1f).consumeWindowInsets(WindowInsets.navigationBars)) {
+                    Crossfade(screenKey, animationSpec = tween(220), label = "screens") { key ->
+                        when {
+                            key.startsWith("search-") -> SearchScreen(
+                                lib = lib, player = player,
+                                targetPlaylist = searchInPlaylist to searchInPlaylistName,
+                                onBack = { searchInPlaylist = NONE },
+                            )
+                            key.startsWith("playlist-") -> PlaylistDetailScreen(
+                                playlistId = openPlaylist, lib = lib, player = player,
+                                onBack = { openPlaylist = NONE },
+                                onSearch = { name -> searchInPlaylistName = name; searchInPlaylist = openPlaylist },
+                            )
+                            else -> CompositionLocalProvider(LocalProfileEntry provides profileEntry) {
+                                HorizontalPager(pager, key = { Tab.entries[it].name }) { page ->
+                                    when (Tab.entries[page]) {
+                                        Tab.HOME -> HomeScreen(lib = lib, settings = settings, player = player)
+                                        Tab.PLAYLISTS -> PlaylistsScreen(lib, onOpenPlaylist = { openPlaylist = it })
+                                        Tab.SEARCH -> SearchScreen(lib = lib, player = player)
+                                        Tab.TOGETHER -> TogetherScreen(together, lib, player, onOpenAccount = { showAccount = true })
+                                    }
+                                }
+                            }
+                        }
                     }
                 }
-            }
-            if (listen.mode != ListenMode.NONE && listen.mode != ListenMode.INVITED) {
-                ListenBanner(listen, partnerName) { tab = Tab.TOGETHER; openPlaylist = NONE; searchInPlaylist = NONE }
-            }
-            if (hasMedia) MiniPlayer(player!!, onOpen = { fullPlayer = true })
-            StyledBottomBar(selected = tab) { selected ->
-                tab = selected
-                openPlaylist = NONE
-                searchInPlaylist = NONE
+                if (listen.mode != ListenMode.NONE && listen.mode != ListenMode.INVITED) {
+                    ListenBanner(listen, partnerName) { goTo(Tab.TOGETHER) }
+                }
+                if (hasMedia) MiniPlayer(player!!, onOpen = { fullPlayer = true })
+                StyledBottomBar(selected = tab, onSelect = ::goTo)
             }
         }
 

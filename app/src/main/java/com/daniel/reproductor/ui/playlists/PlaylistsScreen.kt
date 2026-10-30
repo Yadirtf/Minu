@@ -51,6 +51,7 @@ import com.daniel.reproductor.ui.components.EmptyState
 import com.daniel.reproductor.ui.components.PillButton
 import com.daniel.reproductor.ui.components.ScreenTitle
 import com.daniel.reproductor.ui.library.LibraryViewModel
+import com.daniel.reproductor.ui.profile.ProfileButton
 import com.daniel.reproductor.ui.theme.LocalAppStyle
 
 private sealed interface PlaylistDialog {
@@ -78,7 +79,10 @@ fun PlaylistsScreen(lib: LibraryViewModel, onOpenPlaylist: (Long) -> Unit) {
     ) {
         item(span = { GridItemSpan(maxLineSpan) }) {
             Column(Modifier.padding(start = 4.dp, top = 12.dp)) {
-                ScreenTitle("Playlists", subtitle = "${playlists.size} playlists")
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    ProfileButton(Modifier.padding(end = 14.dp))
+                    ScreenTitle("Playlists", subtitle = "${playlists.size} playlists")
+                }
                 PillButton(
                     "Nueva playlist", Icons.Default.Add, { dialog = PlaylistDialog.Create },
                     Modifier.padding(top = 16.dp).fillMaxWidth(),

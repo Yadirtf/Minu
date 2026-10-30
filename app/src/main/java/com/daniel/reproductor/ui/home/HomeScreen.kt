@@ -21,9 +21,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.DownloadDone
 import androidx.compose.material.icons.filled.LibraryMusic
-import androidx.compose.material.icons.filled.Palette
 import androidx.compose.material.icons.filled.PlayArrow
-import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Shuffle
 import androidx.compose.material.icons.filled.SystemUpdate
 import androidx.compose.material3.FilterChip
@@ -53,6 +51,7 @@ import com.daniel.reproductor.ui.library.PlaylistPickerSheet
 import com.daniel.reproductor.ui.library.SortMode
 import com.daniel.reproductor.ui.library.songActions
 import com.daniel.reproductor.ui.player.PlayerState
+import com.daniel.reproductor.ui.profile.ProfileButton
 import com.daniel.reproductor.ui.settings.SettingsViewModel
 import com.daniel.reproductor.ui.theme.LocalAppStyle
 
@@ -62,8 +61,6 @@ fun HomeScreen(
     lib: LibraryViewModel,
     settings: SettingsViewModel,
     player: PlayerState?,
-    onOpenStyles: () -> Unit,
-    onOpenSettings: () -> Unit,
 ) {
     val songs by lib.homeSongs.collectAsStateWithLifecycle()
     val total by lib.allSongs.collectAsStateWithLifecycle()
@@ -83,14 +80,13 @@ fun HomeScreen(
         contentPadding = PaddingValues(top = WindowInsets.statusBars.asPaddingValues().calculateTopPadding(), bottom = 24.dp),
     ) {
         item {
-            Row(Modifier.fillMaxWidth().padding(start = 20.dp, end = 8.dp, top = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+            Row(Modifier.fillMaxWidth().padding(horizontal = 20.dp).padding(top = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+                ProfileButton(Modifier.padding(end = 14.dp))
                 ScreenTitle(
                     "Mis canciones",
                     Modifier.weight(1f),
                     subtitle = "${total.orEmpty().size} canciones · ${formatTotal(totalSec)}",
                 )
-                IconButton(onClick = onOpenStyles) { Icon(Icons.Default.Palette, "Estilos") }
-                IconButton(onClick = onOpenSettings) { Icon(Icons.Default.Settings, "Ajustes") }
             }
         }
         update?.let { version ->

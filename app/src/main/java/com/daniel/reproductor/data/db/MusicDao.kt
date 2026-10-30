@@ -25,6 +25,24 @@ interface MusicDao {
     @Query("SELECT * FROM Playlist WHERE id = :id")
     fun observePlaylist(id: Long): Flow<Playlist?>
 
+    @Query("SELECT * FROM Playlist WHERE id = :id")
+    suspend fun getPlaylist(id: Long): Playlist?
+
+    /** Playlists que contienen la canción, empezando por la primera a la que se agregó. */
+    @Query(
+        """SELECT Playlist.* FROM Playlist INNER JOIN PlaylistSong ON Playlist.id = PlaylistSong.playlistId
+           WHERE PlaylistSong.videoId = :videoId ORDER BY PlaylistSong.rowid"""
+    )
+    suspend fun getPlaylistsOf(videoId: String): List<Playlist>
+
+    /** Todas las relaciones canción ↔ playlist, en el orden en que se agregaron. */
+    @Query(
+        """SELECT PlaylistSong.videoId AS videoId, Playlist.id AS playlistId, Playlist.name AS playlistName
+           FROM PlaylistSong INNER JOIN Playlist ON Playlist.id = PlaylistSong.playlistId
+           ORDER BY PlaylistSong.rowid"""
+    )
+    suspend fun getMemberships(): List<Membership>
+
     @Insert
     suspend fun insertPlaylist(playlist: Playlist): Long
 
@@ -75,6 +93,13 @@ interface MusicDao {
 
     @Query("UPDATE Song SET downloadState = 'NONE', localPath = NULL WHERE videoId = :videoId")
     suspend fun clearDownload(videoId: String)
+
+    /** Cambia dónde está el archivo, solo si la canción sigue descargada. */
+    @Query("UPDATE Song SET localPath = :path WHERE videoId = :videoId AND localPath IS NOT NULL")
+    suspend fun setLocalPath(videoId: String, path: String)
+
+    @Query("SELECT * FROM Song WHERE localPath IS NOT NULL")
+    suspend fun getDownloadedSongs(): List<Song>
 
     /** Canciones que ya no están en ninguna playlist. */
     @Query("SELECT * FROM Song WHERE videoId NOT IN (SELECT videoId FROM PlaylistSong)")

@@ -57,6 +57,22 @@ El APK queda en `app/build/outputs/apk/release/app-release.apk`.
 
 Si pierdes el celular: instala Minu, inicia sesión con tu usuario y tus playlists vuelven solas. Las descargas se bajan de nuevo desde cada playlist.
 
+## Dónde se guardan las descargas
+
+Por defecto, en la memoria privada de la app. En **Ajustes → Carpeta de descargas** puedes elegir cualquier carpeta del celular (o de la tarjeta SD); Minu crea dentro una subcarpeta por cada playlist y guarda ahí cada canción como `Título - Artista.m4a`:
+
+```
+Música/Minu/
+├── Para el carro/
+│   └── Flowers - Miley Cyrus.m4a
+└── Nuestras canciones/
+```
+
+- Si una canción está en varias playlists, el archivo existe una sola vez: en la carpeta de la playlist desde la que se descargó.
+- Renombrar una playlist renombra su carpeta; borrarla mueve sus canciones a otra playlist donde sigan y quita la carpeta si quedó vacía (nunca se borra lo que tú hayas puesto ahí).
+- Cambiar de carpeta, o volver a la memoria de la app, mueve las descargas existentes en segundo plano.
+- Las carpetas también siguen los cambios que llegan de la nube desde otro celular.
+
 ## Desarrollo
 
 - Pruebas de la app: `./gradlew testDebugUnitTest`
