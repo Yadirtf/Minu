@@ -122,7 +122,11 @@ fun FullPlayerScreen(state: PlayerState, onClose: () -> Unit, save: SaveAction) 
 
 private val PlayerState.title get() = metadata.title?.toString().orEmpty()
 private val PlayerState.artist get() = metadata.artist?.toString().orEmpty()
-private val PlayerState.queueLabel get() = if (itemCount > 0) "${currentIndex + 1} / $itemCount" else ""
+private val PlayerState.queueLabel get() = when {
+    itemCount == 0 -> ""
+    suggested -> "${currentIndex + 1} / $itemCount · sugerida"
+    else -> "${currentIndex + 1} / $itemCount"
+}
 
 @Composable
 private fun TopBar(onClose: () -> Unit, label: String, save: SaveAction, tint: Color = MaterialTheme.colorScheme.onBackground) {

@@ -54,6 +54,7 @@ import com.daniel.reproductor.ui.library.LibraryViewModel
 import com.daniel.reproductor.ui.profile.ProfileButton
 import com.daniel.reproductor.ui.library.PlaylistPickerSheet
 import com.daniel.reproductor.ui.library.songActions
+import com.daniel.reproductor.playback.PlaybackItems
 import com.daniel.reproductor.ui.player.PlayerState
 import com.daniel.reproductor.ui.theme.LocalAppStyle
 
@@ -73,6 +74,7 @@ fun SearchScreen(
     val query by vm.query.collectAsStateWithLifecycle()
     val mode by vm.mode.collectAsStateWithLifecycle()
     val online by vm.online.collectAsStateWithLifecycle()
+    val autoplay by vm.autoplay.collectAsStateWithLifecycle()
     val isOnline by lib.isOnline.collectAsStateWithLifecycle()
     val library by lib.allSongs.collectAsStateWithLifecycle()
     val progress by lib.downloadProgress.collectAsStateWithLifecycle()
@@ -176,7 +178,14 @@ fun SearchScreen(
                                 thumbnail = song.thumbnailUrl,
                                 isCurrent = player?.currentVideoId == song.videoId,
                                 isPlaying = player?.isPlaying == true,
-                                onClick = { player?.playSongs(online.results, index) },
+                                onClick = {
+                                    if (autoplay) {
+                                        val radio = if (mode == SearchMode.MUSIC) PlaybackItems.Radio.MUSIC else PlaybackItems.Radio.VIDEO
+                                        player?.playRadio(song, radio)
+                                    } else {
+                                        player?.playSongs(online.results, index)
+                                    }
+                                },
                                 trailing = {
                                     IconButton(onClick = {
                                         if (targetPlaylist != null) {
