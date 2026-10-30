@@ -112,6 +112,10 @@ jobs:
           chmod +x gradlew
           extra=""
           [ -n "$GOOGLE_WEB_CLIENT_ID" ] && extra="-Pminu.googleWebClientId=$GOOGLE_WEB_CLIENT_ID"
+          # Sin ID de cliente web la app oculta "Continuar con Google"
+          if [ -z "$GOOGLE_WEB_CLIENT_ID" ] && ! { [ -f app/google-services.json ] && jq -e '[.client[].oauth_client[]? | select(.client_type == 3)] | length > 0' app/google-services.json > /dev/null; }; then
+            echo "::warning::Sin ID de cliente web: la APK no mostrará 'Continuar con Google'. Agrega el secret GOOGLE_WEB_CLIENT_ID (ver .github/FIRMA_APK.md)"
+          fi
           [ -n "$VERSION_CODE" ] && extra="$extra -Pminu.versionCode=$VERSION_CODE -Pminu.versionName=$VERSION_NAME"
           ./gradlew assembleRelease --no-daemon $extra
 
