@@ -17,10 +17,11 @@ export async function userFromToken(db, config, token) {
   }
 }
 
-export function requireAuth(db, config) {
+/** [allowQuery]: acepta también ?token= (el reproductor de audio del navegador no manda cabeceras). */
+export function requireAuth(db, config, { allowQuery = false } = {}) {
   return async (req, res, next) => {
     const header = req.get('authorization') || '';
-    const token = header.startsWith('Bearer ') ? header.slice(7) : null;
+    const token = header.startsWith('Bearer ') ? header.slice(7) : allowQuery ? String(req.query.token || '') || null : null;
     const user = await userFromToken(db, config, token);
     if (!user) return res.status(401).json({ error: 'Sesión vencida. Inicia sesión otra vez.' });
     req.user = user;
