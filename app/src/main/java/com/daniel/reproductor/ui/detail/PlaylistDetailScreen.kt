@@ -124,12 +124,12 @@ fun PlaylistDetailScreen(
                         IconButton(onClick = { menu = true }) { Icon(Icons.Default.MoreVert, "Más opciones") }
                         DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
                             DropdownMenuItem(
-                                text = { Text("Descargar toda la playlist") },
+                                text = { Text("Descargar todo el álbum") },
                                 leadingIcon = { Icon(Icons.Default.Download, null) },
                                 onClick = { menu = false; vm.downloadAll() },
                             )
                             DropdownMenuItem(
-                                text = { Text("Eliminar descargas de la playlist") },
+                                text = { Text("Eliminar descargas del álbum") },
                                 leadingIcon = { Icon(Icons.Default.Delete, null) },
                                 onClick = { menu = false; vm.deleteAllDownloads() },
                             )
@@ -168,7 +168,7 @@ fun PlaylistDetailScreen(
                     EmptyState(Icons.AutoMirrored.Filled.QueueMusic, "Nada descargado aquí", "Sin conexión solo suenan las canciones descargadas.")
                 } else {
                     EmptyState(
-                        Icons.AutoMirrored.Filled.QueueMusic, "Playlist vacía",
+                        Icons.AutoMirrored.Filled.QueueMusic, "Álbum vacío",
                         "Usa la lupa de arriba para buscar canciones, pega un link, o comparte desde YouTube.",
                     )
                 }
@@ -190,7 +190,7 @@ fun PlaylistDetailScreen(
                         downloadProgress = progress[song.videoId],
                         onClick = { player?.playSongs(ordered, index) },
                         actions = listOf(
-                            MenuAction("Quitar de esta playlist", Icons.Default.RemoveCircleOutline) { vm.remove(song) },
+                            MenuAction("Quitar de este álbum", Icons.Default.RemoveCircleOutline) { vm.remove(song) },
                         ) + songActions(song, lib) { pickFor = song },
                         // Reordenar solo con la lista completa (no en modo sin conexión)
                         trailing = if (online) {

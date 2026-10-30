@@ -43,7 +43,7 @@ object Push {
                 .apply { description = "Canciones que tu pareja te dedica" }
         )
         manager.createNotificationChannel(
-            NotificationChannel(CHANNEL_TOGETHER, "Juntos", NotificationManager.IMPORTANCE_DEFAULT)
+            NotificationChannel(CHANNEL_TOGETHER, "Dúo", NotificationManager.IMPORTANCE_DEFAULT)
                 .apply { description = "Invitaciones para escuchar juntos y avisos de tu pareja" }
         )
     }
@@ -115,7 +115,7 @@ class MinuMessagingService : FirebaseMessagingService() {
                     },
                 )
             }
-            "partner.request" -> notify(2, Push.CHANNEL_TOGETHER, "💞 $from quiere vincularse contigo", "Abre Juntos en Minu para aceptar.")
+            "partner.request" -> notify(2, Push.CHANNEL_TOGETHER, "💞 $from quiere vincularse contigo", "Abre Dúo en Minu para aceptar.")
             "partner.accepted" -> notify(3, Push.CHANNEL_TOGETHER, "❤️ $from aceptó tu invitación", "Ya pueden dedicarse canciones y escuchar juntos.")
             "listen.invite" -> notify(
                 4, Push.CHANNEL_TOGETHER, "🎧 $from quiere escuchar música contigo", "Toca para unirte.",

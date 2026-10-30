@@ -35,7 +35,7 @@ import com.daniel.reproductor.data.db.Song
 data class SaveAction(val saved: Boolean, val onClick: () -> Unit)
 
 fun saveIcon(saved: Boolean): ImageVector = if (saved) Icons.Default.CheckCircle else Icons.Default.AddCircleOutline
-fun saveLabel(saved: Boolean): String = if (saved) "Guardada · agregar a otra playlist" else "Agregar a playlist"
+fun saveLabel(saved: Boolean): String = if (saved) "Guardada · agregar a otro álbum" else "Agregar a un álbum"
 
 /** Ícono + / ✓ que cambia con una pequeña animación al guardar. */
 @Composable

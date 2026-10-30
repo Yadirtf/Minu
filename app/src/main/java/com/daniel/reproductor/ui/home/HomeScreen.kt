@@ -20,7 +20,7 @@ import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.material.icons.Icons
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.material.icons.automirrored.filled.QueueMusic
+import androidx.compose.material.icons.filled.Album
 import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.SearchOff
@@ -128,7 +128,7 @@ fun HomeScreen(
                         AssistChip(
                             onClick = { onOpenPlaylist(p.playlist.id) },
                             label = { Text("${p.playlist.name} · ${p.songCount}") },
-                            leadingIcon = { Icon(Icons.AutoMirrored.Filled.QueueMusic, null) },
+                            leadingIcon = { Icon(Icons.Default.Album, null) },
                         )
                     }
                 }

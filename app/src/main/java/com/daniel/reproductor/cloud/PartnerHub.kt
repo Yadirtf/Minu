@@ -422,7 +422,7 @@ class PartnerHub(
 
     /** Mensaje para la UI si este celular no puede controlar (sigue al otro). */
     fun lockedReason(): String? =
-        if (_listen.value.following) "${partnerName()} controla la música. En Juntos puedes tomar el control." else null
+        if (_listen.value.following) "${partnerName()} controla la música. En Dúo puedes tomar el control." else null
 
     companion object {
         private const val SAVED_EMOJI = "💚"

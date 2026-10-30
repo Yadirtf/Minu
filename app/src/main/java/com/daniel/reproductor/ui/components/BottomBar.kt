@@ -20,13 +20,13 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.QueueMusic
-import androidx.compose.material.icons.automirrored.outlined.QueueMusic
+import androidx.compose.material.icons.filled.Album
 import androidx.compose.material.icons.filled.Favorite
-import androidx.compose.material.icons.filled.Home
-import androidx.compose.material.icons.outlined.FavoriteBorder
+import androidx.compose.material.icons.filled.LibraryMusic
 import androidx.compose.material.icons.filled.Search
-import androidx.compose.material.icons.outlined.Home
+import androidx.compose.material.icons.outlined.Album
+import androidx.compose.material.icons.outlined.FavoriteBorder
+import androidx.compose.material.icons.outlined.LibraryMusic
 import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -49,13 +49,16 @@ import com.daniel.reproductor.ui.theme.LocalAppStyle
 import com.daniel.reproductor.ui.theme.StyleId
 
 enum class Tab(val label: String, val icon: ImageVector, val selectedIcon: ImageVector) {
-    HOME("Inicio", Icons.Outlined.Home, Icons.Filled.Home),
-    PLAYLISTS("Playlists", Icons.AutoMirrored.Outlined.QueueMusic, Icons.AutoMirrored.Filled.QueueMusic),
+    HOME("Mi música", Icons.Outlined.LibraryMusic, Icons.Filled.LibraryMusic),
+    PLAYLISTS("Álbumes", Icons.Outlined.Album, Icons.Filled.Album),
     SEARCH("Buscar", Icons.Outlined.Search, Icons.Filled.Search),
-    TOGETHER("Juntos", Icons.Outlined.FavoriteBorder, Icons.Filled.Favorite),
+    TOGETHER("Dúo", Icons.Outlined.FavoriteBorder, Icons.Filled.Favorite),
 }
 
-/** Barra inferior con Inicio, Playlists y Buscar, dibujada distinto en cada estilo. */
+/** La pestaña con la que abre la app. */
+val START_TAB = Tab.SEARCH
+
+/** Barra inferior con Mi música, Álbumes, Buscar y Dúo, dibujada distinto en cada estilo. */
 @Composable
 fun StyledBottomBar(selected: Tab, onSelect: (Tab) -> Unit) {
     val style = LocalAppStyle.current

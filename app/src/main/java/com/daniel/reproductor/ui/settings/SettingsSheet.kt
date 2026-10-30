@@ -88,7 +88,7 @@ fun SettingsSheet(
                 onChoose = { folderLauncher.launch(null) },
                 onReset = vm::useAppStorage,
             )
-            SettingRow(Icons.Default.Upload, "Exportar playlists", "Guarda un respaldo en JSON") {
+            SettingRow(Icons.Default.Upload, "Exportar álbumes", "Guarda un respaldo en JSON") {
                 exportLauncher.launch(SettingsViewModel.backupFileName())
             }
             SettingRow(Icons.Default.Download, "Importar playlists", "Desde un respaldo en JSON") {
@@ -115,7 +115,7 @@ private fun DownloadFolderRow(
 ) {
     val subtitle = when {
         organizing != null && organizing.total > 0 -> "Organizando descargas… ${organizing.done} de ${organizing.total}"
-        folder != null -> "$folder › una carpeta por playlist"
+        folder != null -> "$folder › una carpeta por álbum"
         else -> "En la memoria de la app. Toca para elegir una carpeta"
     }
     Column {
