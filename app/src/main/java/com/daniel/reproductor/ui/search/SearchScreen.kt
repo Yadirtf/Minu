@@ -51,6 +51,7 @@ import com.daniel.reproductor.ui.components.EmptyState
 import com.daniel.reproductor.ui.components.ScreenTitle
 import com.daniel.reproductor.ui.components.SongRow
 import com.daniel.reproductor.ui.library.LibraryViewModel
+import com.daniel.reproductor.ui.profile.ProfileButton
 import com.daniel.reproductor.ui.library.PlaylistPickerSheet
 import com.daniel.reproductor.ui.library.songActions
 import com.daniel.reproductor.ui.player.PlayerState
@@ -80,9 +81,11 @@ fun SearchScreen(
     val focusManager = LocalFocusManager.current
     val style = LocalAppStyle.current
 
-    // Desde una playlist lo normal es buscar canciones nuevas
+    // Desde una playlist lo normal es buscar canciones nuevas. La pestaña Buscar no abre el teclado sola:
+    // se llega a ella deslizando y el teclado saltaría a media animación.
     LaunchedEffect(targetPlaylist) {
-        if (targetPlaylist != null && mode == SearchMode.LOCAL) vm.setMode(SearchMode.MUSIC)
+        if (targetPlaylist == null) return@LaunchedEffect
+        if (mode == SearchMode.LOCAL) vm.setMode(SearchMode.MUSIC)
         if (query.isEmpty()) focus.requestFocus()
     }
 
@@ -92,6 +95,7 @@ fun SearchScreen(
     Column(Modifier.fillMaxSize().statusBarsPadding()) {
         Row(Modifier.padding(start = if (onBack != null) 4.dp else 20.dp, end = 16.dp, top = 12.dp), verticalAlignment = Alignment.CenterVertically) {
             if (onBack != null) IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Atrás") }
+            else ProfileButton(Modifier.padding(end = 14.dp))
             ScreenTitle(
                 "Buscar",
                 subtitle = targetPlaylist?.let { "Agregando a ${it.second}" },
