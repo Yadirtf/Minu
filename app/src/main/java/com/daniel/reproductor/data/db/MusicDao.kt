@@ -64,6 +64,9 @@ interface MusicDao {
     @Query("SELECT * FROM Song ORDER BY rowid DESC")
     fun observeAllSongs(): Flow<List<Song>>
 
+    @Query("SELECT * FROM Song ORDER BY rowid DESC LIMIT :limit")
+    suspend fun getRecentSongs(limit: Int): List<Song>
+
     /** Canciones de cada playlist en orden, para armar las portadas tipo mosaico. */
     @Query(
         """SELECT PlaylistSong.playlistId AS playlistId, Song.* FROM PlaylistSong

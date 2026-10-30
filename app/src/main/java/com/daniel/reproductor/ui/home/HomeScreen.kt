@@ -18,6 +18,17 @@ import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.material.icons.Icons
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material.icons.automirrored.filled.QueueMusic
+import androidx.compose.material.icons.filled.Clear
+import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.SearchOff
+import androidx.compose.material3.AssistChip
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedTextFieldDefaults
+import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.DownloadDone
 import androidx.compose.material.icons.filled.LibraryMusic
@@ -55,14 +66,22 @@ import com.daniel.reproductor.ui.profile.ProfileButton
 import com.daniel.reproductor.ui.settings.SettingsViewModel
 import com.daniel.reproductor.ui.theme.LocalAppStyle
 
-/** Inicio: todas las canciones guardadas. */
+/**
+ * Inicio: todas las canciones guardadas, con su propia barra para buscar solo en la biblioteca
+ * (canciones, descargas y playlists). [onSearchOnline] lleva la búsqueda a YouTube cuando aquí no está.
+ */
 @Composable
 fun HomeScreen(
     lib: LibraryViewModel,
     settings: SettingsViewModel,
     player: PlayerState?,
+    onOpenPlaylist: (Long) -> Unit = {},
+    onSearchOnline: (String) -> Unit = {},
 ) {
     val songs by lib.homeSongs.collectAsStateWithLifecycle()
+    val libraryQuery by lib.libraryQuery.collectAsStateWithLifecycle()
+    val matchingPlaylists by lib.matchingPlaylists.collectAsStateWithLifecycle()
+    val focusManager = LocalFocusManager.current
     val total by lib.allSongs.collectAsStateWithLifecycle()
     val sort by lib.sort.collectAsStateWithLifecycle()
     val onlyDownloaded by lib.onlyDownloaded.collectAsStateWithLifecycle()
@@ -87,6 +106,32 @@ fun HomeScreen(
                     Modifier.weight(1f),
                     subtitle = "${total.orEmpty().size} canciones · ${formatTotal(totalSec)}",
                 )
+            }
+        }
+        if (!total.isNullOrEmpty()) {
+            item {
+                LibrarySearchField(
+                    query = libraryQuery,
+                    onQueryChange = { lib.libraryQuery.value = it },
+                    onDone = { focusManager.clearFocus() },
+                )
+            }
+        }
+        if (matchingPlaylists.isNotEmpty()) {
+            item {
+                LazyRow(
+                    contentPadding = PaddingValues(horizontal = 20.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    modifier = Modifier.padding(bottom = 4.dp),
+                ) {
+                    items(matchingPlaylists, key = { it.playlist.id }) { p ->
+                        AssistChip(
+                            onClick = { onOpenPlaylist(p.playlist.id) },
+                            label = { Text("${p.playlist.name} · ${p.songCount}") },
+                            leadingIcon = { Icon(Icons.AutoMirrored.Filled.QueueMusic, null) },
+                        )
+                    }
+                }
             }
         }
         update?.let { version ->
@@ -141,7 +186,14 @@ fun HomeScreen(
         }
         if (songs != null && list.isEmpty()) {
             item {
-                if (total.isNullOrEmpty()) {
+                if (libraryQuery.isNotBlank()) {
+                    Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
+                        EmptyState(Icons.Default.SearchOff, "No está en tu biblioteca", "No hay canciones guardadas que coincidan con \"${libraryQuery.trim()}\".")
+                        if (online) {
+                            PillButton("Buscar en YouTube", Icons.Default.Search, { onSearchOnline(libraryQuery.trim()) }, primary = false)
+                        }
+                    }
+                } else if (total.isNullOrEmpty()) {
                     EmptyState(
                         Icons.Default.LibraryMusic, "Tu biblioteca está vacía",
                         "Busca canciones con la lupa de abajo, o comparte un video desde la app de YouTube.",
@@ -166,6 +218,30 @@ fun HomeScreen(
     }
 
     pickFor?.let { PlaylistPickerSheet(it, lib, onDismiss = { pickFor = null }) }
+}
+
+/** Barra de Inicio: filtra lo guardado mientras escribes, sin tocar internet. */
+@Composable
+private fun LibrarySearchField(query: String, onQueryChange: (String) -> Unit, onDone: () -> Unit) {
+    val style = LocalAppStyle.current
+    OutlinedTextField(
+        value = query,
+        onValueChange = onQueryChange,
+        placeholder = { Text("Buscar en tu biblioteca") },
+        leadingIcon = { Icon(Icons.Default.Search, null) },
+        trailingIcon = {
+            if (query.isNotEmpty()) IconButton(onClick = { onQueryChange("") }) { Icon(Icons.Default.Clear, "Borrar") }
+        },
+        singleLine = true,
+        shape = style.cardShape,
+        colors = OutlinedTextFieldDefaults.colors(
+            unfocusedContainerColor = MaterialTheme.colorScheme.surfaceContainer,
+            focusedContainerColor = MaterialTheme.colorScheme.surfaceContainer,
+        ),
+        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+        keyboardActions = KeyboardActions(onSearch = { onDone() }),
+        modifier = Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, top = 14.dp),
+    )
 }
 
 private fun formatTotal(sec: Long): String {

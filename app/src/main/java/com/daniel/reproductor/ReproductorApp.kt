@@ -11,6 +11,7 @@ import com.daniel.reproductor.cloud.PartnerHub
 import com.daniel.reproductor.cloud.Push
 import com.daniel.reproductor.cloud.Session
 import com.daniel.reproductor.data.AppSettings
+import com.daniel.reproductor.data.ListeningHistory
 import com.daniel.reproductor.data.MusicFiles
 import com.daniel.reproductor.data.MusicRepository
 import com.daniel.reproductor.data.NetworkMonitor
@@ -42,6 +43,7 @@ class ReproductorApp : Application() {
     val database: AppDatabase by lazy { AppDatabase.create(this) }
     val files: MusicFiles by lazy { MusicFiles(this) }
     val settings: AppSettings by lazy { AppSettings(this) }
+    val history: ListeningHistory by lazy { ListeningHistory(database.historyDao(), database.musicDao(), resolver) }
     val network: NetworkMonitor by lazy { NetworkMonitor(this) }
     val updateChecker: ExtractorUpdateChecker by lazy {
         ExtractorUpdateChecker(this, okHttpClient, BuildConfig.NEWPIPE_VERSION)

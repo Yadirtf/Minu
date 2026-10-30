@@ -62,3 +62,20 @@ data class PlaylistWithCount(
     @Embedded val playlist: Playlist,
     val songCount: Int,
 )
+
+/**
+ * Lo que se escuchó de verdad (más de unos segundos), venga de la biblioteca o de YouTube.
+ * Es la base de las recomendaciones; no se sube a la nube.
+ */
+@Entity
+data class PlayHistory(
+    @PrimaryKey val videoId: String,
+    val title: String,
+    val uploader: String,
+    val durationSec: Long,
+    val thumbnailUrl: String,
+    val playCount: Int,
+    val lastPlayedAt: Long,
+) {
+    fun toSong() = Song(videoId, title, uploader, durationSec, thumbnailUrl)
+}

@@ -7,6 +7,7 @@ import androidx.media3.common.MediaItem
 import androidx.media3.common.MediaMetadata
 import com.daniel.reproductor.data.MusicFiles
 import com.daniel.reproductor.data.db.Song
+import com.daniel.reproductor.data.remote.SongSource
 import java.io.File
 
 object PlaybackItems {
@@ -15,10 +16,8 @@ object PlaybackItems {
     private const val EXTRA_RADIO = "radio"
     private const val EXTRA_SUGGESTED = "suggested"
 
-    /** Con [radio] la canción arranca una radio: [RadioQueue] sigue agregando canciones parecidas. */
-    enum class Radio { MUSIC, VIDEO }
-
-    fun fromSong(song: Song, files: MusicFiles, radio: Radio? = null, suggested: Boolean = false): MediaItem =
+    /** Con [radio] la canción arranca una radio de ese catálogo: [RadioQueue] sigue agregando canciones parecidas. */
+    fun fromSong(song: Song, files: MusicFiles, radio: SongSource? = null, suggested: Boolean = false): MediaItem =
         MediaItem.Builder()
             .setMediaId(song.videoId)
             .setUri("$SCHEME://${song.videoId}")
@@ -63,8 +62,8 @@ object PlaybackItems {
         )
     }
 
-    fun radioOf(item: MediaItem): Radio? =
-        item.mediaMetadata.extras?.getString(EXTRA_RADIO)?.let { runCatching { Radio.valueOf(it) }.getOrNull() }
+    fun radioOf(item: MediaItem): SongSource? =
+        item.mediaMetadata.extras?.getString(EXTRA_RADIO)?.let { runCatching { SongSource.valueOf(it) }.getOrNull() }
 
     /** La agregó la radio, no la eligió el usuario. */
     fun isSuggested(item: MediaItem?): Boolean = item?.mediaMetadata?.extras?.getBoolean(EXTRA_SUGGESTED) == true

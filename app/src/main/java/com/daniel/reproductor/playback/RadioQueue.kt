@@ -2,6 +2,7 @@ package com.daniel.reproductor.playback
 
 import androidx.media3.common.Player
 import com.daniel.reproductor.ReproductorApp
+import com.daniel.reproductor.data.remote.SongSource
 import com.daniel.reproductor.data.remote.YouTubeResolver
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
@@ -45,23 +46,23 @@ class RadioQueue(
         job = scope.launch { fill(key, first.mediaId, radio) }
     }
 
-    private suspend fun fill(key: String, seedId: String, radio: PlaybackItems.Radio) {
+    private suspend fun fill(key: String, seedId: String, source: SongSource) {
         for (i in 0 until player.mediaItemCount) seen += player.getMediaItemAt(i).mediaId
-        val musicOnly = radio == PlaybackItems.Radio.MUSIC
         val current = page
         val next = try {
             when {
-                current == null -> app.resolver.radio(seedId, musicOnly)
+                current == null -> app.resolver.radio(seedId, source)
                 current.next != null -> app.resolver.radioMore(current)
                 // Se acabó esta radio: sigue con la de la última canción de la cola.
-                else -> app.resolver.radio(player.getMediaItemAt(player.mediaItemCount - 1).mediaId, musicOnly)
+                else -> app.resolver.radio(player.getMediaItemAt(player.mediaItemCount - 1).mediaId, source)
             }
         } catch (e: Exception) {
             return // sin red o YouTube no respondió: se vuelve a intentar en la próxima canción
         }
         if (seed != key) return // mientras tanto el usuario puso otra cosa
         page = next
-        val fresh = next.songs.filter { seen.add(it.videoId) }.take(BATCH)
+        val fresh = next.songs.filter { it.videoId !in seen }.distinctBy { it.videoId }.take(BATCH)
+        fresh.mapTo(seen) { it.videoId }
         if (fresh.isEmpty()) return
 
         val ended = player.playbackState == Player.STATE_ENDED

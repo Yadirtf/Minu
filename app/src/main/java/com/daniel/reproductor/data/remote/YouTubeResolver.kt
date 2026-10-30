@@ -21,6 +21,9 @@ import org.schabi.newpipe.extractor.stream.DeliveryMethod
 import org.schabi.newpipe.extractor.stream.StreamInfo
 import java.io.IOException
 
+/** De qué catálogo viene una canción: cambia la búsqueda y la radio que se arma con ella. */
+enum class SongSource(val label: String) { MUSIC("YT Music"), YOUTUBE("YouTube") }
+
 class YouTubeResolver {
 
     /** Acepta un link de YouTube o un videoId. Nunca guardes la URL del audio: caduca en horas. */
@@ -31,13 +34,15 @@ class YouTubeResolver {
     }
 
     /**
-     * Busca en YouTube. Con [musicOnly] usa el catálogo de YouTube Music (solo canciones).
+     * Busca en YouTube Music (solo canciones) o en YouTube (videos).
      * Devuelve las canciones listas para guardar, sin tener que resolver cada una.
      */
-    suspend fun search(query: String, musicOnly: Boolean): List<Song> = withContext(Dispatchers.IO) {
+    suspend fun search(query: String, source: SongSource): List<Song> = withContext(Dispatchers.IO) {
         val service = ServiceList.YouTube
-        val filter = if (musicOnly) YoutubeSearchQueryHandlerFactory.MUSIC_SONGS
-        else YoutubeSearchQueryHandlerFactory.VIDEOS
+        val filter = when (source) {
+            SongSource.MUSIC -> YoutubeSearchQueryHandlerFactory.MUSIC_SONGS
+            SongSource.YOUTUBE -> YoutubeSearchQueryHandlerFactory.VIDEOS
+        }
         val handler = service.searchQHFactory.fromQuery(query, listOf(filter), "")
         SearchInfo.getInfo(service, handler).relatedItems.toSongs()
     }
@@ -47,11 +52,11 @@ class YouTubeResolver {
 
     /**
      * La radio que arma YouTube a partir de una canción: canciones parecidas por género, estilo y artista.
-     * Con [musicOnly] usa la de YouTube Music. Si YouTube no da la radio (pasa en algunos países),
+     * Con [SongSource.MUSIC] usa la de YouTube Music. Si YouTube no da la radio (pasa en algunos países),
      * usa los videos relacionados.
      */
-    suspend fun radio(videoId: String, musicOnly: Boolean): RadioPage = withContext(Dispatchers.IO) {
-        val list = (if (musicOnly) "RDAMVM" else "RD") + videoId
+    suspend fun radio(videoId: String, source: SongSource): RadioPage = withContext(Dispatchers.IO) {
+        val list = (if (source == SongSource.MUSIC) "RDAMVM" else "RD") + videoId
         val url = "https://www.youtube.com/watch?v=$videoId&list=$list"
         try {
             val info = PlaylistInfo.getInfo(ServiceList.YouTube, url)

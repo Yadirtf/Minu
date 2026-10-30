@@ -27,9 +27,6 @@ import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
-import androidx.compose.material3.SegmentedButton
-import androidx.compose.material3.SegmentedButtonDefaults
-import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -48,19 +45,20 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.daniel.reproductor.data.db.Song
 import com.daniel.reproductor.ui.components.EmptyState
+import com.daniel.reproductor.ui.components.OfflineBanner
 import com.daniel.reproductor.ui.components.ScreenTitle
 import com.daniel.reproductor.ui.components.SongRow
 import com.daniel.reproductor.ui.library.LibraryViewModel
 import com.daniel.reproductor.ui.profile.ProfileButton
 import com.daniel.reproductor.ui.library.PlaylistPickerSheet
-import com.daniel.reproductor.ui.library.songActions
-import com.daniel.reproductor.playback.PlaybackItems
+import com.daniel.reproductor.data.remote.SongSource
 import com.daniel.reproductor.ui.player.PlayerState
 import com.daniel.reproductor.ui.theme.LocalAppStyle
 
 /**
- * Buscar en mis canciones, en YouTube Music o en YouTube.
+ * Buscar en YouTube Music y YouTube a la vez. Sin texto muestra "Escuchar ahora" y lo escuchado hace poco.
  * Con [targetPlaylist] (al entrar desde una playlist) el botón + agrega directo a esa playlist.
+ * Para buscar en la biblioteca está la barra de Inicio.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -72,12 +70,12 @@ fun SearchScreen(
     vm: SearchViewModel = viewModel(key = "search-${targetPlaylist?.first}", factory = SearchViewModel.Factory),
 ) {
     val query by vm.query.collectAsStateWithLifecycle()
-    val mode by vm.mode.collectAsStateWithLifecycle()
     val online by vm.online.collectAsStateWithLifecycle()
     val autoplay by vm.autoplay.collectAsStateWithLifecycle()
+    val forYou by vm.forYou.collectAsStateWithLifecycle()
+    val recent by vm.recent.collectAsStateWithLifecycle()
     val isOnline by lib.isOnline.collectAsStateWithLifecycle()
-    val library by lib.allSongs.collectAsStateWithLifecycle()
-    val progress by lib.downloadProgress.collectAsStateWithLifecycle()
+    val inLibrary by lib.savedIds.collectAsStateWithLifecycle()
     var pickFor by remember { mutableStateOf<Song?>(null) }
     val focus = remember { FocusRequester() }
     val focusManager = LocalFocusManager.current
@@ -86,13 +84,25 @@ fun SearchScreen(
     // Desde una playlist lo normal es buscar canciones nuevas. La pestaña Buscar no abre el teclado sola:
     // se llega a ella deslizando y el teclado saltaría a media animación.
     LaunchedEffect(targetPlaylist) {
-        if (targetPlaylist == null) return@LaunchedEffect
-        if (mode == SearchMode.LOCAL) vm.setMode(SearchMode.MUSIC)
-        if (query.isEmpty()) focus.requestFocus()
+        if (targetPlaylist != null && query.isEmpty()) focus.requestFocus()
+    }
+    // Las recomendaciones se rearman solas si cambiaron tus gustos o pasó un rato (ver ListeningHistory)
+    LaunchedEffect(isOnline) {
+        if (isOnline && targetPlaylist == null) vm.refreshForYou()
     }
 
-    val inLibrary = remember(library) { library.orEmpty().mapTo(HashSet()) { it.videoId } }
-    val localResults = remember(query, library) { lib.searchLocal(query) }
+    fun play(song: Song, source: SongSource, all: List<Song>, index: Int) {
+        if (autoplay) player?.playRadio(song, source) else player?.playSongs(all, index)
+    }
+    val discover = remember(player, autoplay) {
+        DiscoverActions(
+            play = { songs, index ->
+                if (autoplay) player?.playSession(songs, index, SongSource.MUSIC) else player?.playSongs(songs, index)
+            },
+            playNext = { song -> player?.playNext(song) },
+            addToPlaylist = { song -> pickFor = song },
+        )
+    }
 
     Column(Modifier.fillMaxSize().statusBarsPadding()) {
         Row(Modifier.padding(start = if (onBack != null) 4.dp else 20.dp, end = 16.dp, top = 12.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -106,7 +116,7 @@ fun SearchScreen(
         OutlinedTextField(
             value = query,
             onValueChange = vm::setQuery,
-            placeholder = { Text(if (mode == SearchMode.LOCAL) "Título o artista" else "Canción o artista en ${mode.label}") },
+            placeholder = { Text("¿Qué quieres escuchar?") },
             leadingIcon = { Icon(Icons.Default.Search, null) },
             trailingIcon = {
                 if (query.isNotEmpty()) IconButton(onClick = { vm.setQuery("") }) { Icon(Icons.Default.Clear, "Borrar") }
@@ -118,91 +128,67 @@ fun SearchScreen(
                 focusedContainerColor = MaterialTheme.colorScheme.surfaceContainer,
             ),
             keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
-            keyboardActions = KeyboardActions(onSearch = { focusManager.clearFocus(); vm.searchOnline() }),
+            keyboardActions = KeyboardActions(onSearch = { focusManager.clearFocus(); vm.search() }),
             modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp).focusRequester(focus),
         )
-        SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth().padding(horizontal = 16.dp)) {
-            SearchMode.entries.forEachIndexed { index, m ->
-                SegmentedButton(
-                    selected = mode == m,
-                    onClick = { vm.setMode(m) },
-                    shape = SegmentedButtonDefaults.itemShape(index, SearchMode.entries.size, style.cardShape),
-                    icon = {},
-                    colors = SegmentedButtonDefaults.colors(
-                        activeContainerColor = MaterialTheme.colorScheme.primary,
-                        activeContentColor = MaterialTheme.colorScheme.onPrimary,
-                    ),
-                ) { Text(style.label(m.label), maxLines = 1, style = MaterialTheme.typography.labelMedium) }
-            }
-        }
 
-        Box(Modifier.fillMaxSize().padding(top = 8.dp)) {
+        Box(Modifier.fillMaxSize()) {
             when {
-                mode == SearchMode.LOCAL -> {
-                    if (query.isBlank()) {
-                        EmptyState(Icons.Default.Search, "Busca en tu biblioteca", "Escribe el nombre de una canción o artista.")
-                    } else if (localResults.isEmpty()) {
-                        EmptyState(
-                            Icons.Default.SearchOff, "No está en tu biblioteca",
-                            "Prueba buscarla en YouTube Music o en YouTube con las pestañas de arriba.",
+                query.isBlank() && targetPlaylist != null -> EmptyState(
+                    Icons.Default.Search, "Busca en YouTube",
+                    "Toca + para agregar la canción a ${targetPlaylist.second}.",
+                )
+                query.isBlank() -> LazyColumn(contentPadding = PaddingValues(bottom = 24.dp)) {
+                    if (!isOnline) item { OfflineBanner("Sin conexión: las recomendaciones vuelven cuando tengas internet") }
+                    else item {
+                        ForYouSection(
+                            forYou = forYou,
+                            currentVideoId = player?.currentVideoId,
+                            isPlaying = player?.isPlaying == true,
+                            actions = discover,
+                            onRetry = { vm.refreshForYou(force = true) },
                         )
-                    } else {
-                        ResultList(localResults) { index, song ->
-                            SongRow(
-                                song = song,
-                                thumbnail = lib.thumbnail(song),
-                                isCurrent = player?.currentVideoId == song.videoId,
-                                isPlaying = player?.isPlaying == true,
-                                downloadProgress = progress[song.videoId],
-                                onClick = { player?.playSongs(localResults, index) },
-                                actions = songActions(song, lib) { pickFor = song },
-                            )
-                        }
                     }
+                    item { RecentSection(recent, discover) }
                 }
                 !isOnline -> EmptyState(Icons.Default.CloudOff, "Sin conexión", "Para buscar en YouTube necesitas internet.")
                 else -> Column {
                     if (online.loading) LinearProgressIndicator(Modifier.fillMaxWidth().padding(horizontal = 16.dp))
                     when {
                         online.error != null -> EmptyState(Icons.Default.SearchOff, "No se pudo buscar", online.error.orEmpty())
-                        query.isBlank() -> EmptyState(
-                            Icons.Default.Search, "Busca en ${mode.label}",
-                            "Toca una canción para escucharla y + para guardarla en una playlist.",
-                        )
                         online.results.isEmpty() && !online.loading && online.searchedFor != null ->
                             EmptyState(Icons.Default.SearchOff, "Sin resultados", "Prueba con otras palabras.")
-                        else -> ResultList(online.results) { index, song ->
-                            val saved = song.videoId in inLibrary
-                            SongRow(
-                                song = song,
-                                thumbnail = song.thumbnailUrl,
-                                isCurrent = player?.currentVideoId == song.videoId,
-                                isPlaying = player?.isPlaying == true,
-                                onClick = {
-                                    if (autoplay) {
-                                        val radio = if (mode == SearchMode.MUSIC) PlaybackItems.Radio.MUSIC else PlaybackItems.Radio.VIDEO
-                                        player?.playRadio(song, radio)
-                                    } else {
-                                        player?.playSongs(online.results, index)
-                                    }
-                                },
-                                trailing = {
-                                    IconButton(onClick = {
-                                        if (targetPlaylist != null) {
-                                            vm.addToPlaylist(targetPlaylist.first, song)
-                                            lib.message("Agregada a ${targetPlaylist.second}")
-                                        } else {
-                                            pickFor = song
-                                        }
-                                    }) {
-                                        if (saved) {
-                                            Icon(Icons.Default.CheckCircle, "Ya está guardada", tint = MaterialTheme.colorScheme.primary)
-                                        } else {
-                                            Icon(Icons.Default.AddCircleOutline, "Agregar a playlist")
-                                        }
-                                    }
-                                },
-                            )
+                        else -> {
+                            val songs = remember(online.results) { online.results.map { it.song } }
+                            LazyColumn(contentPadding = PaddingValues(bottom = 24.dp)) {
+                                itemsIndexed(online.results, key = { _, hit -> hit.song.videoId }) { index, hit ->
+                                    val song = hit.song
+                                    SongRow(
+                                        song = song,
+                                        thumbnail = song.thumbnailUrl,
+                                        isCurrent = player?.currentVideoId == song.videoId,
+                                        isPlaying = player?.isPlaying == true,
+                                        onClick = { play(song, hit.source, songs, index) },
+                                        tag = hit.source.label,
+                                        trailing = {
+                                            IconButton(onClick = {
+                                                if (targetPlaylist != null) {
+                                                    vm.addToPlaylist(targetPlaylist.first, song)
+                                                    lib.message("Agregada a ${targetPlaylist.second}")
+                                                } else {
+                                                    pickFor = song
+                                                }
+                                            }) {
+                                                if (song.videoId in inLibrary) {
+                                                    Icon(Icons.Default.CheckCircle, "Ya está guardada", tint = MaterialTheme.colorScheme.primary)
+                                                } else {
+                                                    Icon(Icons.Default.AddCircleOutline, "Agregar a playlist")
+                                                }
+                                            }
+                                        },
+                                    )
+                                }
+                            }
                         }
                     }
                 }
@@ -211,11 +197,4 @@ fun SearchScreen(
     }
 
     pickFor?.let { PlaylistPickerSheet(it, lib, onDismiss = { pickFor = null }) }
-}
-
-@Composable
-private fun ResultList(songs: List<Song>, row: @Composable (Int, Song) -> Unit) {
-    LazyColumn(contentPadding = PaddingValues(bottom = 24.dp)) {
-        itemsIndexed(songs, key = { _, s -> s.videoId }) { index, song -> row(index, song) }
-    }
 }

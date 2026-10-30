@@ -20,10 +20,13 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.layout.consumeWindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
@@ -52,7 +55,10 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
@@ -106,16 +112,25 @@ fun FullPlayerScreen(state: PlayerState, onClose: () -> Unit, save: SaveAction) 
             onDragEnd = { if (total > 140.dp.toPx()) onClose() },
         ) { _, dy -> total += dy }
     }
-    Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background).then(closeOnSwipe)) {
-        when (style.id) {
-            StyleId.NEON -> NeonPlayer(state, onClose, save)
-            StyleId.VINYL -> VinylPlayer(state, onClose, save)
-            StyleId.AURORA -> AuroraPlayer(state, onClose, save)
-            StyleId.TERMINAL -> TerminalPlayer(state, onClose, save)
-            StyleId.BRUTAL -> BrutalPlayer(state, onClose, save)
-            StyleId.MATERIAL -> MaterialPlayer(state, onClose, save)
+    var showQueue by rememberSaveable { mutableStateOf(false) }
+    Column(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background).then(closeOnSwipe)) {
+        // Cada estilo deja su margen para la barra de navegación; aquí lo pone la franja de "A continuación"
+        Box(Modifier.weight(1f).consumeWindowInsets(WindowInsets.navigationBars)) {
+            when (style.id) {
+                StyleId.NEON -> NeonPlayer(state, onClose, save)
+                StyleId.VINYL -> VinylPlayer(state, onClose, save)
+                StyleId.AURORA -> AuroraPlayer(state, onClose, save)
+                StyleId.TERMINAL -> TerminalPlayer(state, onClose, save)
+                StyleId.BRUTAL -> BrutalPlayer(state, onClose, save)
+                StyleId.MATERIAL -> MaterialPlayer(state, onClose, save)
+            }
         }
+        UpNextBar(
+            state, onOpen = { showQueue = true },
+            modifier = Modifier.navigationBarsPadding().padding(start = 16.dp, end = 16.dp, top = 4.dp, bottom = 12.dp),
+        )
     }
+    if (showQueue) QueueSheet(state, onDismiss = { showQueue = false })
 }
 
 // ---------- Piezas comunes ----------
