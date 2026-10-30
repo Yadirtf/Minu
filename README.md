@@ -49,6 +49,8 @@ La firma usa `keystore/reproductor-release.jks` y `keystore.properties`. **Ningu
 
 El APK queda en `app/build/outputs/apk/release/app-release.apk`.
 
+También se puede compilar en GitHub Actions sin tu computador: ver [.github/FIRMA_APK.md](.github/FIRMA_APK.md).
+
 ## Uso en dos celulares
 
 1. Cada persona instala Minu y crea su cuenta (Ajustes → Cuenta y nube) con el código de invitación.
