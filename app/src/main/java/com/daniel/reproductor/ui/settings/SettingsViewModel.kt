@@ -41,6 +41,9 @@ class SettingsViewModel(
     val wifiOnly: StateFlow<Boolean> = settings.wifiOnly
     fun setWifiOnly(value: Boolean) = settings.setWifiOnly(value)
 
+    val autoplay: StateFlow<Boolean> = settings.autoplay
+    fun setAutoplay(value: Boolean) = settings.setAutoplay(value)
+
     /** Carpeta elegida en texto legible ("Memoria interna › Music › Minu"), o null si es la memoria de la app. */
     val downloadFolder: StateFlow<String?> = settings.downloadTree
         .mapLatest { downloads.describeLocation() }

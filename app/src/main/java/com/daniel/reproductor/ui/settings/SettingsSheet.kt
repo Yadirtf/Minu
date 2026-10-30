@@ -19,6 +19,7 @@ import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.FolderOpen
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Palette
+import androidx.compose.material.icons.filled.Radio
 import androidx.compose.material.icons.filled.Upload
 import androidx.compose.material.icons.filled.Wifi
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -50,6 +51,7 @@ fun SettingsSheet(
     onOpenAccount: () -> Unit,
 ) {
     val wifiOnly by vm.wifiOnly.collectAsStateWithLifecycle()
+    val autoplay by vm.autoplay.collectAsStateWithLifecycle()
     val downloadFolder by vm.downloadFolder.collectAsStateWithLifecycle()
     val organizing by vm.organizing.collectAsStateWithLifecycle()
     val style = LocalAppStyle.current
@@ -78,6 +80,8 @@ fun SettingsSheet(
             SettingRow(Icons.Default.Palette, "Estilo de la app", style.name) { onDismiss(); onOpenStyles() }
             SettingRow(Icons.Default.Wifi, "Descargar solo con Wi-Fi", "Las descargas esperan a tener Wi-Fi",
                 trailing = { Switch(checked = wifiOnly, onCheckedChange = vm::setWifiOnly) }) { vm.setWifiOnly(!wifiOnly) }
+            SettingRow(Icons.Default.Radio, "Reproducción automática", "Al tocar una canción de YouTube, sigue con canciones parecidas",
+                trailing = { Switch(checked = autoplay, onCheckedChange = vm::setAutoplay) }) { vm.setAutoplay(!autoplay) }
             DownloadFolderRow(
                 folder = downloadFolder,
                 organizing = organizing,

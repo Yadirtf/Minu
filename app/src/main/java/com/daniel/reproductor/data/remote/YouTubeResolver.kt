@@ -4,6 +4,7 @@ import com.daniel.reproductor.data.YouTubeLinks
 import com.daniel.reproductor.data.db.Song
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import org.schabi.newpipe.extractor.Page
 import org.schabi.newpipe.extractor.ServiceList
 import org.schabi.newpipe.extractor.exceptions.AgeRestrictedContentException
 import org.schabi.newpipe.extractor.exceptions.ContentNotAvailableException
@@ -11,6 +12,7 @@ import org.schabi.newpipe.extractor.exceptions.GeographicRestrictionException
 import org.schabi.newpipe.extractor.exceptions.PaidContentException
 import org.schabi.newpipe.extractor.exceptions.PrivateContentException
 import org.schabi.newpipe.extractor.exceptions.ReCaptchaException
+import org.schabi.newpipe.extractor.playlist.PlaylistInfo
 import org.schabi.newpipe.extractor.search.SearchInfo
 import org.schabi.newpipe.extractor.services.youtube.linkHandler.YoutubeSearchQueryHandlerFactory
 import org.schabi.newpipe.extractor.stream.AudioStream
@@ -37,20 +39,47 @@ class YouTubeResolver {
         val filter = if (musicOnly) YoutubeSearchQueryHandlerFactory.MUSIC_SONGS
         else YoutubeSearchQueryHandlerFactory.VIDEOS
         val handler = service.searchQHFactory.fromQuery(query, listOf(filter), "")
-        SearchInfo.getInfo(service, handler).relatedItems
-            .filterIsInstance<StreamInfoItem>()
-            .filter { it.duration > 0 } // sin transmisiones en vivo
-            .mapNotNull { item ->
-                val id = YouTubeLinks.extractVideoId(item.url) ?: return@mapNotNull null
-                Song(
-                    videoId = id,
-                    title = item.name,
-                    uploader = item.uploaderName.orEmpty(),
-                    durationSec = item.duration,
-                    thumbnailUrl = item.thumbnails.maxByOrNull { it.height }?.url.orEmpty(),
-                )
-            }
+        SearchInfo.getInfo(service, handler).relatedItems.toSongs()
     }
+
+    /** Un tramo de la radio de una canción. [next] es null cuando YouTube ya no da más. */
+    class RadioPage(val url: String, val songs: List<Song>, val next: Page?)
+
+    /**
+     * La radio que arma YouTube a partir de una canción: canciones parecidas por género, estilo y artista.
+     * Con [musicOnly] usa la de YouTube Music. Si YouTube no da la radio (pasa en algunos países),
+     * usa los videos relacionados.
+     */
+    suspend fun radio(videoId: String, musicOnly: Boolean): RadioPage = withContext(Dispatchers.IO) {
+        val list = (if (musicOnly) "RDAMVM" else "RD") + videoId
+        val url = "https://www.youtube.com/watch?v=$videoId&list=$list"
+        try {
+            val info = PlaylistInfo.getInfo(ServiceList.YouTube, url)
+            RadioPage(url, info.relatedItems.toSongs(), info.nextPage)
+        } catch (e: Exception) {
+            if (e is IOException || e is ReCaptchaException) throw e
+            RadioPage(url, getInfo(videoId).relatedItems.toSongs(), null)
+        }
+    }
+
+    /** El siguiente tramo de la misma radio. */
+    suspend fun radioMore(page: RadioPage): RadioPage = withContext(Dispatchers.IO) {
+        val more = PlaylistInfo.getMoreItems(ServiceList.YouTube, page.url, page.next)
+        RadioPage(page.url, more.items.toSongs(), more.nextPage)
+    }
+
+    private fun List<*>.toSongs(): List<Song> = filterIsInstance<StreamInfoItem>()
+        .filter { it.duration > 0 } // sin transmisiones en vivo
+        .mapNotNull { item ->
+            val id = YouTubeLinks.extractVideoId(item.url) ?: return@mapNotNull null
+            Song(
+                videoId = id,
+                title = item.name,
+                uploader = item.uploaderName.orEmpty(),
+                durationSec = item.duration,
+                thumbnailUrl = item.thumbnails.maxByOrNull { it.height }?.url.orEmpty(),
+            )
+        }
 
     /** Mejor audio descargable de una sola URL (m4a o webm/opus), ignorando DASH/HLS. */
     fun bestAudio(info: StreamInfo): AudioStream {

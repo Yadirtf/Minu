@@ -14,6 +14,10 @@ class AppSettings(context: Context) {
     private val _wifiOnly = MutableStateFlow(prefs.getBoolean(KEY_WIFI_ONLY, false))
     val wifiOnly: StateFlow<Boolean> = _wifiOnly.asStateFlow()
 
+    /** Al tocar una canción buscada en YouTube, seguir con su radio en vez de los demás resultados. */
+    private val _autoplay = MutableStateFlow(prefs.getBoolean(KEY_AUTOPLAY, true))
+    val autoplay: StateFlow<Boolean> = _autoplay.asStateFlow()
+
     private val _style = MutableStateFlow(
         runCatching { StyleId.valueOf(prefs.getString(KEY_STYLE, null)!!) }.getOrDefault(StyleId.NEON)
     )
@@ -33,6 +37,11 @@ class AppSettings(context: Context) {
         _wifiOnly.value = value
     }
 
+    fun setAutoplay(value: Boolean) {
+        prefs.edit { putBoolean(KEY_AUTOPLAY, value) }
+        _autoplay.value = value
+    }
+
     fun setStyle(value: StyleId) {
         prefs.edit { putString(KEY_STYLE, value.name) }
         _style.value = value
@@ -41,6 +50,7 @@ class AppSettings(context: Context) {
     private companion object {
         const val KEY_WIFI_ONLY = "wifi_only"
         const val KEY_STYLE = "style"
+        const val KEY_AUTOPLAY = "autoplay"
         const val KEY_DOWNLOAD_TREE = "download_tree"
     }
 }

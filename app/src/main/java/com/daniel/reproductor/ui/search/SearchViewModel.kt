@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
+import com.daniel.reproductor.data.AppSettings
 import com.daniel.reproductor.data.MusicRepository
 import com.daniel.reproductor.data.UserFacingException
 import com.daniel.reproductor.data.db.Song
@@ -26,7 +27,10 @@ data class OnlineResults(
     val searchedFor: String? = null,
 )
 
-class SearchViewModel(private val repo: MusicRepository) : ViewModel() {
+class SearchViewModel(private val repo: MusicRepository, settings: AppSettings) : ViewModel() {
+
+    /** Si está activa, tocar un resultado online arranca su radio en vez de encolar los demás resultados. */
+    val autoplay: StateFlow<Boolean> = settings.autoplay
 
     val query = MutableStateFlow("")
     val mode = MutableStateFlow(SearchMode.LOCAL)
@@ -67,6 +71,6 @@ class SearchViewModel(private val repo: MusicRepository) : ViewModel() {
     fun addToPlaylist(playlistId: Long, song: Song) = viewModelScope.launch { repo.addSong(playlistId, song) }
 
     companion object {
-        val Factory = viewModelFactory { initializer { SearchViewModel(app.repository) } }
+        val Factory = viewModelFactory { initializer { SearchViewModel(app.repository, app.settings) } }
     }
 }

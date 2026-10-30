@@ -59,6 +59,8 @@ class PlayerState(val player: Player, private val files: MusicFiles) {
     var error by mutableStateOf<String?>(null); private set
     var currentIndex by mutableIntStateOf(0); private set
     var itemCount by mutableIntStateOf(0); private set
+    /** La canción que suena la agregó la reproducción automática. */
+    var suggested by mutableStateOf(false); private set
 
     internal val listener = object : Player.Listener {
         override fun onEvents(player: Player, events: Player.Events) = refresh()
@@ -78,6 +80,7 @@ class PlayerState(val player: Player, private val files: MusicFiles) {
         hasNext = player.hasNextMediaItem()
         currentIndex = player.currentMediaItemIndex
         itemCount = player.mediaItemCount
+        suggested = PlaybackItems.isSuggested(player.currentMediaItem)
         updatePosition()
     }
 
@@ -106,6 +109,15 @@ class PlayerState(val player: Player, private val files: MusicFiles) {
         error = null
         player.shuffleModeEnabled = shuffled
         player.setMediaItems(songs.map { PlaybackItems.fromSong(it, files) }, startIndex, 0L)
+        player.prepare()
+        player.play()
+    }
+
+    /** Pone [song] y deja que la reproducción automática siga con canciones parecidas. */
+    fun playRadio(song: Song, radio: PlaybackItems.Radio) = ifUnlocked {
+        error = null
+        player.shuffleModeEnabled = false
+        player.setMediaItem(PlaybackItems.fromSong(song, files, radio = radio))
         player.prepare()
         player.play()
     }

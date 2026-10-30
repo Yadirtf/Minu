@@ -27,6 +27,10 @@ import com.daniel.reproductor.data.remote.OkHttpDownloader
 import com.daniel.reproductor.data.remote.YouTubeResolver
 import com.google.common.util.concurrent.Futures
 import com.google.common.util.concurrent.ListenableFuture
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.runBlocking
 import java.io.IOException
 import java.util.concurrent.ConcurrentHashMap
@@ -39,6 +43,7 @@ import java.util.concurrent.ConcurrentHashMap
 class PlaybackService : MediaSessionService() {
 
     private var session: MediaSession? = null
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
 
     /** URLs resueltas solo en memoria, para no volver a consultar YouTube en cada seek. */
     private val urlCache = ConcurrentHashMap<String, Pair<String, Long>>()
@@ -65,6 +70,7 @@ class PlaybackService : MediaSessionService() {
             .setWakeMode(C.WAKE_MODE_NETWORK)
             .build()
         player.addListener(SkipOnErrorListener(player))
+        player.addListener(RadioQueue(player, app, scope))
 
         val openApp = PendingIntent.getActivity(
             this, 0, Intent(this, MainActivity::class.java),
@@ -106,6 +112,7 @@ class PlaybackService : MediaSessionService() {
     }
 
     override fun onDestroy() {
+        scope.cancel()
         session?.run {
             player.release()
             release()

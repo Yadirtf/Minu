@@ -1,6 +1,7 @@
 package com.daniel.reproductor.playback
 
 import android.net.Uri
+import android.os.Bundle
 import androidx.core.net.toUri
 import androidx.media3.common.MediaItem
 import androidx.media3.common.MediaMetadata
@@ -11,7 +12,13 @@ import java.io.File
 object PlaybackItems {
     private const val SCHEME = "yt"
 
-    fun fromSong(song: Song, files: MusicFiles): MediaItem =
+    private const val EXTRA_RADIO = "radio"
+    private const val EXTRA_SUGGESTED = "suggested"
+
+    /** Con [radio] la canción arranca una radio: [RadioQueue] sigue agregando canciones parecidas. */
+    enum class Radio { MUSIC, VIDEO }
+
+    fun fromSong(song: Song, files: MusicFiles, radio: Radio? = null, suggested: Boolean = false): MediaItem =
         MediaItem.Builder()
             .setMediaId(song.videoId)
             .setUri("$SCHEME://${song.videoId}")
@@ -23,6 +30,12 @@ object PlaybackItems {
                     .setDurationMs(song.durationSec * 1000)
                     .setIsPlayable(true)
                     .setIsBrowsable(false)
+                    .setExtras(
+                        Bundle().apply {
+                            radio?.let { putString(EXTRA_RADIO, it.name) }
+                            if (suggested) putBoolean(EXTRA_SUGGESTED, true)
+                        }.takeUnless { it.isEmpty() }
+                    )
                     .build()
             )
             .build()
@@ -49,6 +62,12 @@ object PlaybackItems {
             thumbnailUrl = meta.artworkUri?.takeIf { it.scheme?.startsWith("http") == true }?.toString().orEmpty(),
         )
     }
+
+    fun radioOf(item: MediaItem): Radio? =
+        item.mediaMetadata.extras?.getString(EXTRA_RADIO)?.let { runCatching { Radio.valueOf(it) }.getOrNull() }
+
+    /** La agregó la radio, no la eligió el usuario. */
+    fun isSuggested(item: MediaItem?): Boolean = item?.mediaMetadata?.extras?.getBoolean(EXTRA_SUGGESTED) == true
 
     fun withPlaybackUri(item: MediaItem): MediaItem =
         item.buildUpon().setUri("$SCHEME://${item.mediaId}").build()
