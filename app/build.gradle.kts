@@ -16,6 +16,10 @@ val keystoreProps = Properties().apply {
     if (file.exists()) file.inputStream().use { load(it) }
 }
 
+// En GitHub Actions no hay keystore.properties: los mismos datos llegan como variables de entorno (ver .github/FIRMA_APK.md)
+fun signingValue(env: String, prop: String): String? =
+    System.getenv(env)?.takeIf { it.isNotBlank() } ?: keystoreProps.getProperty(prop)
+
 android {
     namespace = "com.daniel.reproductor"
     compileSdk = 37
@@ -35,12 +39,13 @@ android {
     }
 
     signingConfigs {
-        if (keystoreProps.getProperty("storeFile") != null) {
+        val storePath = signingValue("MINU_KEYSTORE_FILE", "storeFile")
+        if (storePath != null) {
             create("release") {
-                storeFile = rootProject.file(keystoreProps.getProperty("storeFile"))
-                storePassword = keystoreProps.getProperty("storePassword")
-                keyAlias = keystoreProps.getProperty("keyAlias")
-                keyPassword = keystoreProps.getProperty("keyPassword")
+                storeFile = rootProject.file(storePath)
+                storePassword = signingValue("MINU_KEYSTORE_PASSWORD", "storePassword")
+                keyAlias = signingValue("MINU_KEY_ALIAS", "keyAlias")
+                keyPassword = signingValue("MINU_KEY_PASSWORD", "keyPassword")
             }
         }
     }

@@ -1,0 +1,106 @@
+# Compila la APK release firmada con el keystore de siempre (el mismo SHA-1 que tiene Firebase).
+# Guía de los secrets: .github/FIRMA_APK.md
+name: APK firmada
+
+on:
+  workflow_dispatch:      # botón "Run workflow" en la pestaña Actions
+  push:
+    tags: ["v*"]          # git tag v1.1 && git push origin v1.1 -> además crea un Release
+
+permissions:
+  contents: write         # para publicar el Release cuando se empuja un tag
+
+concurrency:
+  group: apk-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      MINU_KEYSTORE_FILE: ${{ github.workspace }}/keystore/release.jks
+      MINU_KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+      MINU_KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+      MINU_KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Revisar que los secrets existan
+        env:
+          KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
+        run: |
+          faltan=""
+          for s in KEYSTORE_BASE64 MINU_KEYSTORE_PASSWORD MINU_KEY_ALIAS MINU_KEY_PASSWORD; do
+            [ -z "${!s}" ] && faltan="$faltan $s"
+          done
+          if [ -n "$faltan" ]; then
+            echo "::error::Faltan secrets para firmar:$faltan (ver .github/FIRMA_APK.md)"
+            exit 1
+          fi
+
+      - name: Restaurar keystore
+        env:
+          KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
+        run: |
+          mkdir -p keystore
+          echo "$KEYSTORE_BASE64" | base64 --decode > "$MINU_KEYSTORE_FILE"
+          # Falla aquí si la contraseña o el alias no coinciden. Compara este SHA-1 con el de Firebase.
+          keytool -list -v -keystore "$MINU_KEYSTORE_FILE" -storepass "$MINU_KEYSTORE_PASSWORD" -alias "$MINU_KEY_ALIAS" > keytool.txt
+          grep -E "SHA1|SHA256" keytool.txt; rm keytool.txt
+
+      - name: Restaurar google-services.json (opcional)
+        env:
+          GOOGLE_SERVICES_JSON_BASE64: ${{ secrets.GOOGLE_SERVICES_JSON_BASE64 }}
+        run: |
+          if [ -n "$GOOGLE_SERVICES_JSON_BASE64" ]; then
+            echo "$GOOGLE_SERVICES_JSON_BASE64" | base64 --decode > app/google-services.json
+            echo "google-services.json restaurado: Firebase activado"
+          else
+            echo "::warning::Sin GOOGLE_SERVICES_JSON_BASE64: la APK se compila sin Firebase (sin notificaciones push)"
+          fi
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - uses: gradle/actions/setup-gradle@v4
+
+      - name: Compilar APK release
+        env:
+          GOOGLE_WEB_CLIENT_ID: ${{ secrets.GOOGLE_WEB_CLIENT_ID }}
+        run: |
+          chmod +x gradlew
+          extra=""
+          [ -n "$GOOGLE_WEB_CLIENT_ID" ] && extra="-Pminu.googleWebClientId=$GOOGLE_WEB_CLIENT_ID"
+          ./gradlew assembleRelease --no-daemon $extra
+
+      - name: Verificar firma
+        run: |
+          apk=app/build/outputs/apk/release/app-release.apk
+          test -f "$apk" || { echo "::error::No se generó $apk (¿quedó sin firmar?)"; ls -R app/build/outputs/apk; exit 1; }
+          apksigner=$(ls -d "$ANDROID_HOME"/build-tools/*/apksigner | sort -V | tail -1)
+          "$apksigner" verify --print-certs "$apk" | grep -i "SHA-1\|SHA-256"
+          if [ "$GITHUB_REF_TYPE" = tag ]; then name="Minu-$GITHUB_REF_NAME.apk"
+          else name="Minu-${GITHUB_REF_NAME//\//-}-build$GITHUB_RUN_NUMBER.apk"; fi
+          cp "$apk" "$name"
+          echo "APK_NAME=$name" >> "$GITHUB_ENV"
+
+      - name: Subir APK como artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.APK_NAME }}
+          path: ${{ env.APK_NAME }}
+          retention-days: 30
+
+      - name: Publicar Release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: ${{ env.APK_NAME }}
+          generate_release_notes: true
+
+      - name: Borrar keystore del runner
+        if: always()
+        run: rm -f "$MINU_KEYSTORE_FILE" app/google-services.json
