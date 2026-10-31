@@ -116,8 +116,25 @@ object DuoDates {
     fun idea(m: DuoMilestone): String = when (m) {
         is DuoMilestone.Anniversary -> "Recreen su primera cita con la canción de origen sonando."
         is DuoMilestone.Days -> "Escuchen juntos las canciones que más se han dedicado."
-        is DuoMilestone.Monthsary -> MISSIONS[(m.months - 1) % MISSIONS.size]
+        is DuoMilestone.Monthsary -> mission(m.months)
     }
+
+    /** La misión del mes [month] (1, 2, 3…): el ciclo de 12 se repite cada año. */
+    fun mission(month: Int) = MISSIONS[(month - 1).mod(MISSIONS.size)]
+
+    /** Meses completos desde el inicio hasta [day] (con el mismo recorte de fin de mes). */
+    fun monthsBetween(start: LocalDate, day: LocalDate): Int {
+        var m = ChronoUnit.MONTHS.between(start, day).toInt().coerceAtLeast(0)
+        if (start.plusMonths((m + 1).toLong()) <= day) m += 1
+        return m
+    }
+
+    /** El mes N de la relación va de [start + N-1 meses, start + N meses). */
+    fun monthRange(start: LocalDate, month: Int): Pair<LocalDate, LocalDate> =
+        start.plusMonths((month - 1).toLong()) to start.plusMonths(month.toLong())
+
+    private val SHORT_DATE = DateTimeFormatter.ofPattern("d MMM", SPANISH)
+    fun short(date: LocalDate): String = SHORT_DATE.format(date).replace(".", "")
 
     private val MISSIONS = listOf(
         "La primera página: escríbanse en una frase cómo fue su primer mes.",

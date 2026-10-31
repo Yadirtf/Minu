@@ -86,7 +86,10 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.daniel.reproductor.cloud.Dedication
+import com.daniel.reproductor.cloud.DuoDates
+import com.daniel.reproductor.cloud.DuoInfo
 import com.daniel.reproductor.cloud.DuoStreak
+import com.daniel.reproductor.cloud.MissionState
 import com.daniel.reproductor.cloud.ListenMode
 import com.daniel.reproductor.cloud.ListenSession
 import com.daniel.reproductor.cloud.PartnerInfo
@@ -104,6 +107,7 @@ import com.daniel.reproductor.ui.profile.ProfileButton
 import com.daniel.reproductor.ui.theme.LocalAppStyle
 import kotlinx.coroutines.launch
 import java.text.DateFormat
+import java.time.LocalDate
 import java.util.Date
 
 private val AIRMAIL_BLUE = Color(0xFF3D6BFF)
@@ -123,6 +127,9 @@ fun TogetherScreen(vm: TogetherViewModel, lib: LibraryViewModel, player: PlayerS
     var dedicating by remember { mutableStateOf(false) }
     var confirmUnlink by remember { mutableStateOf(false) }
     var editingOrigin by remember { mutableStateOf(false) }
+    var showMemories by remember { mutableStateOf(false) }
+    val capsuleOpen by vm.capsuleOpen.collectAsStateWithLifecycle()
+    val openTape by vm.openTape.collectAsStateWithLifecycle()
     val duo by vm.duo.collectAsStateWithLifecycle()
     val saveSheet = rememberSaveToPlaylistState()
     val save = player?.takeIf { it.hasMedia }?.let { p ->
@@ -164,7 +171,13 @@ fun TogetherScreen(vm: TogetherViewModel, lib: LibraryViewModel, player: PlayerS
                 streak = duo?.streak?.takeIf { linkedPartner != null },
             )
         }
-        if (linkedPartner != null) item { OriginLine(duo, onEdit = { editingOrigin = true }) }
+        if (linkedPartner != null) {
+            item { OriginLine(duo, onEdit = { editingOrigin = true }) }
+            item { MemoriesEntry { showMemories = true } }
+            missionToShow(duo)?.let { (month, state) ->
+                item { MissionCard(month, state, linkedPartner.displayName) { done -> vm.markMission(month, done) } }
+            }
+        }
 
         when {
             user == null -> item {
@@ -237,6 +250,16 @@ fun TogetherScreen(vm: TogetherViewModel, lib: LibraryViewModel, player: PlayerS
         )
     }
 
+    if (capsuleOpen) {
+        CapsuleScreen(vm, lib, partner?.partner?.displayName.orEmpty(), onDismiss = { vm.showCapsule(false) })
+    }
+    if (showMemories || openTape != null) {
+        MemoriesScreen(
+            vm, duo, partner?.partner?.displayName.orEmpty(), startTape = openTape, playing = player?.isPlaying == true,
+            onDismiss = { showMemories = false; vm.requestTape(null) },
+        )
+    }
+
     if (editingOrigin) {
         OriginSheet(
             origin = duo?.origin,
@@ -297,6 +320,51 @@ private fun InfoCard(title: String, text: String, content: @Composable () -> Uni
     }
 }
 
+/** Entrada a Recuerdos: cintas del mes, cápsulas y misiones. */
+@Composable
+private fun MemoriesEntry(onClick: () -> Unit) {
+    Row(
+        Modifier.fillMaxWidth().clip(LocalAppStyle.current.cardShape).background(MaterialTheme.colorScheme.surfaceContainer)
+            .clickable(onClick = onClick).padding(horizontal = 16.dp, vertical = 12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text("📼", fontSize = 24.sp)
+        Spacer(Modifier.size(12.dp))
+        Column(Modifier.weight(1f)) {
+            Text("Recuerdos", style = MaterialTheme.typography.titleMedium)
+            Text("Sus cintas del mes, cápsulas y misiones", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+    }
+}
+
+/** La misión del mes se muestra la semana siguiente al mesiversario, hasta que la marquen los dos. */
+private fun missionToShow(duo: DuoInfo?): Pair<Int, MissionState?>? {
+    val start = DuoDates.parse(duo?.origin?.startedOn) ?: return null
+    val today = LocalDate.now()
+    val month = DuoDates.monthsBetween(start, today)
+    if (month < 1) return null
+    val state = duo?.missions?.get(month)
+    val since = DuoDates.days(DuoDates.monthRange(start, month).second, today)
+    return (month to state).takeIf { since in 0..6 && state?.done != true }
+}
+
+@Composable
+private fun MissionCard(month: Int, state: MissionState?, partnerName: String, onDone: (Boolean) -> Unit) {
+    InfoCard("🎶 Misión del mes $month", DuoDates.mission(month)) {
+        Text(
+            when {
+                state?.partner == true -> "$partnerName ya la marcó. Si la hicieron, márcala tú también."
+                state?.mine == true -> "La marcaste. Falta que $partnerName la marque."
+                else -> "Cuando la hagan, márquenla los dos y quedará en sus recuerdos."
+            },
+            style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Spacer(Modifier.height(10.dp))
+        val mine = state?.mine == true
+        PillButton(if (mine) "Desmarcar" else "Lo hicimos", Icons.Default.Favorite, { onDone(!mine) }, Modifier.fillMaxWidth(), primary = !mine)
+    }
+}
+
 /** El día del reto: qué toca para salvar el hilo y cuánto llevan. */
 @Composable
 private fun RescueCard(vm: TogetherViewModel, streak: DuoStreak, partner: PartnerInfo, listen: ListenSession) {
@@ -308,7 +376,18 @@ private fun RescueCard(vm: TogetherViewModel, streak: DuoStreak, partner: Partne
                 "(les ${if (streak.rescuesLeft == 1) "queda 1 rescate" else "quedan ${streak.rescuesLeft} rescates"} este mes).",
         ) {
             PillButton("Media hora en la misma canción", Icons.Default.Headphones, { vm.chooseRescue("listen") }, Modifier.fillMaxWidth())
+            Spacer(Modifier.height(10.dp))
+            PillButton("Cápsula de tres canciones", Icons.Default.Favorite, { vm.chooseRescue("capsule") }, Modifier.fillMaxWidth(), primary = false)
             TextButton(onClick = vm::giveUpRescue, modifier = Modifier.fillMaxWidth()) { Text("Dejar que se rompa") }
+        }
+        return
+    }
+    if (rescue.type == "capsule") {
+        InfoCard(
+            "💌 En rescate: la cápsula de tres canciones",
+            "Cada uno responde tres preguntas con una canción. Se abre cuando terminen los dos, y ahí el hilo queda salvado.",
+        ) {
+            PillButton("Abrir la cápsula", Icons.Default.Favorite, { vm.showCapsule(true) }, Modifier.fillMaxWidth())
         }
         return
     }

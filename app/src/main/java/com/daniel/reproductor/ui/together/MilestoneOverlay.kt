@@ -70,6 +70,7 @@ fun MilestoneOverlay(
     song: Song?,
     onPlay: (Song) -> Unit,
     onDismiss: () -> Unit,
+    onOpenTape: (Int) -> Unit = {},
 ) {
     val haptics = LocalHapticFeedback.current
     val anniversary = milestone is DuoMilestone.Anniversary
@@ -196,7 +197,11 @@ fun MilestoneOverlay(
                 Modifier.fillMaxWidth().graphicsLayer { alpha = textAlpha },
                 horizontalAlignment = Alignment.CenterHorizontally,
             ) {
-                if (song != null && !anniversary) {
+                if (milestone is DuoMilestone.Monthsary) {
+                    PillButton("Escuchar la Cinta del mes ${milestone.months}", Icons.Default.PlayArrow, { onOpenTape(milestone.months) }, Modifier.fillMaxWidth())
+                    if (song != null) TextButton(onClick = { onPlay(song) }) { Text("Escuchar nuestra canción", color = Color.White) }
+                    TextButton(onClick = onDismiss) { Text("Seguir", color = Color.White) }
+                } else if (song != null && !anniversary) {
                     PillButton("Escuchar nuestra canción", Icons.Default.PlayArrow, { onPlay(song) }, Modifier.fillMaxWidth())
                     TextButton(onClick = onDismiss) { Text("Seguir", color = Color.White) }
                 } else {

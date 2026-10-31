@@ -1,10 +1,10 @@
-import { coupleKey, couples, streakDays } from './db.js';
+import { capsules, coupleKey, couples, streakDays } from './db.js';
 
 /** Rescates por mes. El día 1 vuelven a ser exactamente estos: no se acumulan. */
 export const MONTHLY_RESCUES = 3;
 /** Reto 1: media hora escuchando juntos. */
 export const LISTEN_GOAL_SEC = 30 * 60;
-export const RESCUE_TYPES = new Set(['listen']);
+export const RESCUE_TYPES = new Set(['listen', 'capsule']);
 
 /** "AAAA-MM-DD" en la zona horaria de la pareja. */
 export function localDay(timeZone, date = new Date()) {
@@ -134,7 +134,9 @@ export async function chooseRescue(db, me, type, now = new Date()) {
   const { couple, key, today } = await refreshStreak(db, me._id, me.partnerId, now);
   const rescue = couple.streak.rescue;
   if (!rescue) return { error: 'Hoy no hay ningún reto pendiente.' };
-  if (rescue.listenedSec > 0 && rescue.type !== type) return { error: 'El reto ya empezó: no se puede cambiar.' };
+  const capsule = rescue.type === 'capsule' ? await capsules(db).findOne({ _id: `${key}:${today}` }) : null;
+  const started = rescue.listenedSec > 0 || Object.keys(capsule?.answers ?? {}).length > 0;
+  if (started && rescue.type !== type) return { error: 'El reto ya empezó: no se puede cambiar.' };
   const first = rescue.type === null;
   const month = today.slice(0, 7);
   const used = couple.rescues?.month === month ? couple.rescues.used : 0;

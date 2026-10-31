@@ -248,7 +248,7 @@ private fun SheetLabel(text: String) {
 }
 
 @Composable
-private fun SongSearch(lib: LibraryViewModel, onPick: (Song) -> Unit) {
+internal fun SongSearch(lib: LibraryViewModel, onPick: (Song) -> Unit) {
     val library by lib.allSongs.collectAsStateWithLifecycle()
     var query by remember { mutableStateOf("") }
     val results = if (query.isBlank()) library.orEmpty().take(30) else lib.searchLocal(query)

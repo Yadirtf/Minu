@@ -237,7 +237,8 @@ private fun AtRiskContent(
             Text("Ayer el hilo no sonó.", color = Color.White, fontSize = 24.sp, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center)
             Spacer(Modifier.height(6.dp))
             Text(
-                if (chosen != null) "${streak.rescue?.chosenByName ?: partner} eligió salvarlo hoy con media hora en la misma canción."
+                if (chosen != null) "${streak.rescue?.chosenByName ?: partner} eligió salvarlo hoy con " +
+                    (if (chosen == "capsule") "la cápsula de tres canciones." else "media hora en la misma canción.")
                 else "Hoy pueden volver a anudarlo con un reto. Mientras tanto, las dedicatorias esperan a mañana.",
                 color = Color.White.copy(alpha = 0.8f), fontSize = 15.sp, textAlign = TextAlign.Center,
             )
@@ -253,7 +254,8 @@ private fun AtRiskContent(
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
             if (chosen != null) {
-                PillButton("Vamos a escuchar juntos", Icons.Default.Headphones, onDismiss, Modifier.fillMaxWidth())
+                if (chosen == "capsule") PillButton("Abrir la cápsula", Icons.Default.Favorite, { onChoose("capsule") }, Modifier.fillMaxWidth())
+                else PillButton("Vamos a escuchar juntos", Icons.Default.Headphones, onDismiss, Modifier.fillMaxWidth())
             } else {
                 ChallengeCard(
                     "Media hora en la misma canción",
@@ -262,9 +264,9 @@ private fun AtRiskContent(
                 ) { onChoose("listen") }
                 ChallengeCard(
                     "Cápsula de tres canciones",
-                    "Tres preguntas, tres canciones cada uno, selladas hasta que los dos terminen. Llega en la próxima versión.",
-                    tilt = 1.5f, enabled = false,
-                ) {}
+                    "Tres preguntas, tres canciones cada uno, selladas hasta que los dos terminen. Funciona aunque estén lejos.",
+                    tilt = 1.5f, enabled = true,
+                ) { onChoose("capsule") }
                 TextButton(onClick = onGiveUp) { Text("Dejar que se rompa", color = Color.White.copy(alpha = 0.6f)) }
             }
         }
