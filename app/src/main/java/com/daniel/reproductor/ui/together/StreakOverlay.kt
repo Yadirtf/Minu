@@ -14,6 +14,7 @@ import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -199,7 +200,7 @@ private fun DrawScope.drawBraiding(time: Float) {
 private fun fade(time: Float, from: Float, length: Float = 0.6f) = ((time - from) / length).coerceIn(0f, 1f)
 
 @Composable
-private fun Content(content: @Composable () -> Unit) {
+private fun Content(content: @Composable ColumnScope.() -> Unit) {
     Column(
         Modifier.fillMaxSize().systemBarsPadding().padding(horizontal = 24.dp).padding(top = 170.dp, bottom = 20.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
