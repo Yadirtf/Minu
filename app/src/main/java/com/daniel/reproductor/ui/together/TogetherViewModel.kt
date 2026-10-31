@@ -5,6 +5,7 @@ import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import com.daniel.reproductor.cloud.Account
+import com.daniel.reproductor.cloud.AnniversaryGift
 import com.daniel.reproductor.cloud.CloudApi
 import com.daniel.reproductor.cloud.CloudSync
 import com.daniel.reproductor.cloud.Capsule
@@ -171,6 +172,45 @@ class TogetherViewModel(
     fun requestTape(month: Int?) { _openTape.value = month }
 
     fun markMission(month: Int, done: Boolean) = action(if (done) "Misión marcada 🎶" else null) { hub.markMission(month, done) }
+
+    // ---------- Aniversario ----------
+
+    /** El aniversario que está en pantalla (null = ninguno). */
+    private val _anniversaryOpen = MutableStateFlow<Int?>(null)
+    val anniversaryOpen: StateFlow<Int?> = _anniversaryOpen.asStateFlow()
+    private val _anniversary = MutableStateFlow<AnniversaryGift?>(null)
+    val anniversary: StateFlow<AnniversaryGift?> = _anniversary.asStateFlow()
+
+    init {
+        viewModelScope.launch {
+            hub.events.collect { e ->
+                if (e is HubEvent.AnniversaryChanged && e.years == _anniversaryOpen.value) loadAnniversary(e.years)
+            }
+        }
+    }
+
+    fun showAnniversary(years: Int?) {
+        if (years != _anniversaryOpen.value) _anniversary.value = null
+        _anniversaryOpen.value = years
+        years?.let(::loadAnniversary)
+    }
+
+    fun loadAnniversary(years: Int) = viewModelScope.launch {
+        runCatching { api.anniversary(years) }.onSuccess { if (_anniversaryOpen.value == years) _anniversary.value = it }
+    }
+
+    /** Un pulso del abrazo: mientras lo mantienen, la pantalla lo repite cada pocos segundos. */
+    fun hug(years: Int) = viewModelScope.launch {
+        try {
+            _anniversary.value = api.hug(years)
+        } catch (e: UserFacingException) {
+            _messages.send(e.message.orEmpty())
+        }
+    }
+
+    fun openAnniversaryAlone(years: Int) = action { _anniversary.value = api.openAnniversary(years); hub.refreshDuo() }
+    fun voteSong(years: Int, videoId: String) = action { _anniversary.value = api.voteSong(years, videoId) }
+    fun writeLetter(text: String) = action("Carta sellada hasta su próximo aniversario 💌") { hub.writeLetter(text) }
 
     fun playAll(songs: List<Song>) = viewModelScope.launch { runCatching { hub.playSongs(songs) } }
     fun giveUpRescue() = action { hub.giveUpRescue() }

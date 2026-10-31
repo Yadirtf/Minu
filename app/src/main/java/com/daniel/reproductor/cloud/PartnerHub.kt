@@ -51,6 +51,8 @@ sealed interface HubEvent {
     data class Message(val text: String) : HubEvent
     /** Cumplieron el reto: el hilo se vuelve a anudar en vivo. */
     data object StreakSaved : HubEvent
+    /** Algo cambió en el aniversario [years]: el otro está abrazando, lo abrieron o votó. */
+    data class AnniversaryChanged(val years: Int) : HubEvent
 }
 
 /**
@@ -137,6 +139,7 @@ class PartnerHub(
     suspend fun chooseRescue(type: String) = setDuo(api.chooseRescue(type))
     suspend fun giveUpRescue() = setDuo(api.giveUpRescue())
     suspend fun markMission(month: Int, done: Boolean) = setDuo(api.markMission(month, done))
+    suspend fun writeLetter(text: String) = setDuo(api.writeLetter(text))
 
     /** Solo lo de Dúo (racha y fecha), sin pedir de nuevo pareja y cartas. */
     fun refreshDuo() {
@@ -310,6 +313,10 @@ class PartnerHub(
             "pong" -> latencyMs = ((System.currentTimeMillis() - msg.optLong("t")) / 2).coerceIn(0, 2_000)
             "hello", "partner.update" -> refresh()
             "duo.update" -> refreshDuo()
+            "anniversary.hug", "anniversary.opened", "anniversary.vote" -> {
+                if (msg.optString("type") == "anniversary.opened") refreshDuo()
+                _events.tryEmit(HubEvent.AnniversaryChanged(msg.optInt("years")))
+            }
             "streak.saved" -> {
                 refreshDuo()
                 _events.tryEmit(HubEvent.StreakSaved)

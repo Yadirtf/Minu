@@ -87,6 +87,7 @@ import com.daniel.reproductor.ui.theme.ReproductorTheme
 import com.daniel.reproductor.ui.theme.StyleId
 import com.daniel.reproductor.ui.theme.rememberArtworkColor
 import com.daniel.reproductor.cloud.DuoDates
+import com.daniel.reproductor.cloud.DuoMilestone
 import com.daniel.reproductor.cloud.DuoPrefs
 import com.daniel.reproductor.cloud.HubEvent
 import com.daniel.reproductor.cloud.ListenMode
@@ -239,7 +240,7 @@ internal fun AppRoot(
             when (e) {
                 is HubEvent.Message -> snackbar.showSnackbar(e.text)
                 is HubEvent.IncomingDedication -> if (e.dedication.autoplay) liveDedicationId = e.dedication.id
-                is HubEvent.LiveReaction -> Unit
+                is HubEvent.LiveReaction, is HubEvent.AnniversaryChanged -> Unit
                 HubEvent.StreakSaved -> liveSaved = true
             }
         }
@@ -388,6 +389,17 @@ internal fun AppRoot(
                 onRetie = { markStreakSeen(moment); goTo(Tab.TOGETHER) },
                 onDismiss = { markStreakSeen(moment) },
             )
+        } else if (milestone is DuoMilestone.Anniversary && pending == null && partner?.linked == true) {
+            // El aniversario no se celebra aquí: es un regalo envuelto en Dúo que se abre con el abrazo de los dos
+            LaunchedEffect(milestone.key) {
+                val mark = "$today:${milestone.key}"
+                DuoPrefs.setCelebrated(app, mark)
+                celebrated = mark
+                if (duo?.anniversaries?.any { it.years == milestone.years && it.opened } != true) {
+                    together.showAnniversary(milestone.years)
+                    goTo(Tab.TOGETHER)
+                }
+            }
         } else if (milestone != null && pending == null && partner?.linked == true) {
             MilestoneOverlay(
                 milestone = milestone,

@@ -415,3 +415,66 @@ test('cápsula: salva la racha cuando los dos sellan sus tres canciones; cinta d
     fakeNow = null;
   }
 });
+
+test('aniversario: se abre con el abrazo de los dos, cuenta su año, abre las cartas y elige la canción del año', async () => {
+  const a = (await register('penelope')).body.token;
+  const b = (await register('ulises')).body.token;
+  await api('POST', '/partner/request', { username: 'ulises' }, a);
+  await api('POST', '/partner/accept', null, b);
+  const song = (id, title) => ({ videoId: id, title, uploader: 'X', durationSec: 200, thumbnailUrl: '' });
+  const at = (day) => (fakeNow = new Date(`${day}T15:00:00Z`)); // 10:00 en Bogotá
+  try {
+    at('2025-01-05');
+    await api('PUT', '/duo/origin', { startedOn: '2024-06-10', story: 'En el bus, compartiendo audífonos' }, a);
+    await api('POST', '/dedications', { song: song('aaaaaaaaaaa', 'La nuestra'), message: 'la primera' }, a);
+    fakeNow = new Date('2025-01-05T16:00:00Z');
+    await api('POST', '/dedications', { song: song('aaaaaaaaaaa', 'La nuestra') }, b);
+    at('2025-01-06');
+    await api('POST', '/dedications', { song: song('bbbbbbbbbbb', 'Otra') }, a);
+
+    at('2025-03-01');
+    const sealed = (await api('PUT', '/duo/letter', { text: 'Querido Ulises…' }, a)).body.letter;
+    assert.deepEqual(sealed, { year: 1, opensOn: '2025-06-10', mine: 'Querido Ulises…', partnerWrote: false });
+    await api('PUT', '/duo/letter', { text: 'Querida Penélope…' }, b);
+    assert.equal((await api('GET', '/duo', null, a)).body.letter.partnerWrote, true);
+
+    at('2025-06-09');
+    assert.equal((await api('GET', '/duo/anniversary/1', null, a)).status, 409);
+
+    at('2025-06-10');
+    let gift = (await api('GET', '/duo/anniversary/1', null, a)).body.anniversary;
+    assert.equal(gift.openedAt, null);
+    assert.equal(gift.canOpenSolo, false);
+    assert.equal(gift.story, null);
+    assert.equal((await api('POST', '/duo/anniversary/1/open', null, a)).status, 409); // antes de las 8 p. m.
+
+    gift = (await api('POST', '/duo/anniversary/1/hug', null, a)).body.anniversary;
+    assert.equal(gift.openedAt, null);
+    assert.equal((await api('GET', '/duo/anniversary/1', null, b)).body.anniversary.partnerHugging, true);
+    const opened = (await api('POST', '/duo/anniversary/1/hug', null, b)).body.anniversary;
+    assert.ok(opened.openedAt);
+
+    const story = opened.story;
+    assert.equal(story.originStory, 'En el bus, compartiendo audífonos');
+    assert.equal(story.first.message, 'la primera');
+    assert.equal(story.first.fromMe, false);
+    assert.deepEqual(story.dedications, { total: 3, mine: 1 });
+    assert.deepEqual(story.top.map((t) => [t.song.title, t.count]), [['La nuestra', 2], ['Otra', 1]]);
+    assert.deepEqual(story.letters.map((l) => l.text).sort(), ['Querida Penélope…', 'Querido Ulises…']);
+
+    // Canción del año: si no coinciden, gana la más dedicada de las dos
+    assert.equal((await api('POST', '/duo/anniversary/1/vote', { videoId: 'ccccccccccc' }, a)).status, 409);
+    await api('POST', '/duo/anniversary/1/vote', { videoId: 'bbbbbbbbbbb' }, a);
+    const voted = (await api('POST', '/duo/anniversary/1/vote', { videoId: 'aaaaaaaaaaa' }, b)).body.anniversary.story.vote;
+    assert.equal(voted.mine, 'aaaaaaaaaaa');
+    assert.equal(voted.partner, 'bbbbbbbbbbb');
+    assert.equal(voted.song.title, 'La nuestra');
+
+    const duo = (await api('GET', '/duo', null, a)).body;
+    assert.deepEqual(duo.anniversaries, [{ years: 1, date: '2025-06-10', opened: true }]);
+    assert.equal(duo.letter.year, 2);
+    assert.equal(duo.letter.mine, null);
+  } finally {
+    fakeNow = null;
+  }
+});

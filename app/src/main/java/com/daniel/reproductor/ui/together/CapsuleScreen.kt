@@ -185,8 +185,8 @@ private fun SealedWaiting(capsule: Capsule, partnerName: String) {
 
 /** La cápsula abierta: pregunta por pregunta, tu canción y la suya, apareciendo una tras otra. */
 @Composable
-internal fun CapsuleReveal(capsule: Capsule, partnerName: String, onPlay: (Song) -> Unit, animate: Boolean = true) {
-    Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+internal fun CapsuleReveal(capsule: Capsule, partnerName: String, onPlay: (Song) -> Unit, animate: Boolean = true, scroll: Boolean = true) {
+    Column(if (scroll) Modifier.verticalScroll(rememberScrollState()) else Modifier, verticalArrangement = Arrangement.spacedBy(16.dp)) {
         capsule.prompts.forEachIndexed { i, prompt ->
             val show = remember { Animatable(if (animate) 0f else 1f) }
             LaunchedEffect(Unit) { show.animateTo(1f, tween(600, delayMillis = 350 * i, easing = FastOutSlowInEasing)) }

@@ -85,6 +85,7 @@ export function completeRescue(s) {
     lastDay: s.rescue.day,
     rescue: null,
     saved: { day: s.rescue.day, type: s.rescue.type },
+    saves: (s.saves ?? 0) + 1, // para las historias del aniversario
   };
 }
 
@@ -200,6 +201,7 @@ export async function streakView(db, me, now = new Date()) {
     rescuesLeft: rescuesLeftFor(couple, today),
     broken: s.broken,
     saved: s.saved,
+    saves: s.saves ?? 0,
     listenSec: couple.listenSec ?? 0,
   };
 }

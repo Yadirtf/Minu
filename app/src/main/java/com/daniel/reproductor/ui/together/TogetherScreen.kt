@@ -130,6 +130,7 @@ fun TogetherScreen(vm: TogetherViewModel, lib: LibraryViewModel, player: PlayerS
     var showMemories by remember { mutableStateOf(false) }
     val capsuleOpen by vm.capsuleOpen.collectAsStateWithLifecycle()
     val openTape by vm.openTape.collectAsStateWithLifecycle()
+    val anniversaryOpen by vm.anniversaryOpen.collectAsStateWithLifecycle()
     val duo by vm.duo.collectAsStateWithLifecycle()
     val saveSheet = rememberSaveToPlaylistState()
     val save = player?.takeIf { it.hasMedia }?.let { p ->
@@ -173,6 +174,9 @@ fun TogetherScreen(vm: TogetherViewModel, lib: LibraryViewModel, player: PlayerS
         }
         if (linkedPartner != null) {
             item { OriginLine(duo, onEdit = { editingOrigin = true }) }
+            duo?.anniversaries?.lastOrNull { !it.opened }?.let { gift ->
+                item { GiftCard(gift.years, linkedPartner.displayName) { vm.showAnniversary(gift.years) } }
+            }
             item { MemoriesEntry { showMemories = true } }
             missionToShow(duo)?.let { (month, state) ->
                 item { MissionCard(month, state, linkedPartner.displayName) { done -> vm.markMission(month, done) } }
@@ -259,6 +263,9 @@ fun TogetherScreen(vm: TogetherViewModel, lib: LibraryViewModel, player: PlayerS
             onDismiss = { showMemories = false; vm.requestTape(null) },
         )
     }
+    anniversaryOpen?.let { years ->
+        AnniversaryScreen(vm, years, myName, partner?.partner?.displayName.orEmpty(), onDismiss = { vm.showAnniversary(null) })
+    }
 
     if (editingOrigin) {
         OriginSheet(
@@ -317,6 +324,14 @@ private fun InfoCard(title: String, text: String, content: @Composable () -> Uni
             Spacer(Modifier.height(16.dp))
             content()
         }
+    }
+}
+
+/** Un aniversario que todavía no abren: un regalo envuelto que espera el abrazo de los dos. */
+@Composable
+private fun GiftCard(years: Int, partnerName: String, onOpen: () -> Unit) {
+    InfoCard("🎁 ${DuoDates.yearsPhrase(years).replaceFirstChar { it.uppercase() }} juntos", "Su aniversario está envuelto. Solo se abre con un abrazo de los dos en el hilo.") {
+        PillButton("Abrirlo con $partnerName", Icons.Default.Favorite, onOpen, Modifier.fillMaxWidth())
     }
 }
 

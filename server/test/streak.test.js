@@ -1,6 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { addDays, completeRescue, emptyStreak, evaluateStreak, localDay } from '../src/duo.js';
+import { anniversaryDate, yearsDone } from '../src/anniversary.js';
 
 const days = (...list) => (d) => list.includes(d);
 const always = () => 3;
@@ -56,4 +57,11 @@ test('fechas: día local de la pareja y meses que cambian', () => {
   assert.equal(localDay('Europe/Madrid', new Date('2026-03-02T03:00:00Z')), '2026-03-02');
   assert.equal(addDays('2026-02-28', 1), '2026-03-01');
   assert.equal(addDays('2024-12-31', 1), '2025-01-01');
+});
+
+test('aniversario: el 29 de febrero se celebra el 28 en años no bisiestos', () => {
+  assert.equal(anniversaryDate('2024-02-29', 1), '2025-02-28');
+  assert.equal(anniversaryDate('2024-02-29', 4), '2028-02-29');
+  assert.equal(yearsDone('2024-06-10', '2025-06-09'), 0);
+  assert.equal(yearsDone('2024-06-10', '2026-06-10'), 2);
 });

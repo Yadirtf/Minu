@@ -29,9 +29,11 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Headphones
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -63,6 +65,7 @@ import com.daniel.reproductor.cloud.DuoDates
 import com.daniel.reproductor.cloud.DuoInfo
 import com.daniel.reproductor.cloud.MissionState
 import com.daniel.reproductor.cloud.MixtapeTrack
+import com.daniel.reproductor.cloud.SealedLetter
 import com.daniel.reproductor.ui.components.ArtworkImage
 import com.daniel.reproductor.ui.components.PillButton
 import java.time.LocalDate
@@ -83,7 +86,11 @@ fun MemoriesScreen(
     val capsules by vm.memories.collectAsStateWithLifecycle()
     var tape by rememberSaveable { mutableStateOf(startTape) }
     var capsule by remember { mutableStateOf<Capsule?>(null) }
+    var writing by remember { mutableStateOf(false) }
     LaunchedEffect(Unit) { vm.loadMemories() }
+    if (writing) {
+        LetterDialog(duo?.letter, partnerName, onDismiss = { writing = false }) { vm.writeLetter(it); writing = false }
+    }
     val start = DuoDates.parse(duo?.origin?.startedOn)
     val today = remember { LocalDate.now() }
 
@@ -103,7 +110,10 @@ fun MemoriesScreen(
                 }
                 else -> {
                     ScreenHeader("Recuerdos", "Lo que su música ha guardado", onDismiss)
-                    MemoriesList(start, today, duo, capsules, partnerName, onTape = { tape = it }, onCapsule = { capsule = it }, onMission = vm::markMission)
+                    MemoriesList(
+                        start, today, duo, capsules, partnerName, onTape = { tape = it }, onCapsule = { capsule = it }, onMission = vm::markMission,
+                        onAnniversary = { vm.showAnniversary(it) }, onLetter = { writing = true },
+                    )
                 }
             }
         }
@@ -120,9 +130,31 @@ private fun MemoriesList(
     onTape: (Int) -> Unit,
     onCapsule: (Capsule) -> Unit,
     onMission: (Int, Boolean) -> Unit,
+    onAnniversary: (Int) -> Unit,
+    onLetter: () -> Unit,
 ) {
     val months = start?.let { DuoDates.monthsBetween(it, today) } ?: 0
     LazyColumn(contentPadding = PaddingValues(bottom = 32.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        if (start != null) {
+            item { Section("Aniversarios") }
+            items(duo?.anniversaries.orEmpty().sortedByDescending { it.years }, key = { "a${it.years}" }) { a ->
+                MemoryRow(
+                    "🎁", if (a.years == 1) "Nuestro primer año" else "${a.years} años",
+                    (DuoDates.parse(a.date)?.let { DuoDates.format(it) } ?: a.date) + if (a.opened) "" else " · envuelto, ábranlo juntos",
+                ) { onAnniversary(a.years) }
+            }
+            duo?.letter?.let { letter ->
+                item {
+                    val opens = DuoDates.parse(letter.opensOn)?.let { DuoDates.format(it) } ?: letter.opensOn
+                    MemoryRow(
+                        "💌", "Carta para ${DuoDates.yearsPhrase(letter.year)}",
+                        (if (letter.mine != null) "Sellada" else "Escríbela") + " · se abre el $opens" +
+                            if (letter.partnerWrote) " · $partnerName ya selló la suya" else "",
+                        onClick = onLetter,
+                    )
+                }
+            }
+        }
         item { Section("Cintas del mes") }
         if (start == null) {
             item { Hint("Guarda en Dúo el día en que empezó todo: cada mes tendrá su cinta con las canciones que se dedicaron.") }
@@ -150,6 +182,28 @@ private fun MemoriesList(
             }
         }
     }
+}
+
+/** La carta para el próximo aniversario: se puede reescribir mientras siga sellada. */
+@Composable
+private fun LetterDialog(letter: SealedLetter?, partnerName: String, onDismiss: () -> Unit, onSeal: (String) -> Unit) {
+    var text by rememberSaveable { mutableStateOf(letter?.mine.orEmpty()) }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Carta para $partnerName") },
+        text = {
+            Column {
+                Text(
+                    "Se abrirá cuando abran juntos su próximo aniversario. Hasta entonces nadie la puede leer.",
+                    style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Spacer(Modifier.height(12.dp))
+                OutlinedTextField(value = text, onValueChange = { text = it.take(3000) }, minLines = 6, modifier = Modifier.fillMaxWidth())
+            }
+        },
+        confirmButton = { TextButton(onClick = { if (text.isNotBlank()) onSeal(text.trim()) }, enabled = text.isNotBlank()) { Text("Sellar") } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancelar") } },
+    )
 }
 
 @Composable
