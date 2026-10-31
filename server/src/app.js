@@ -209,7 +209,7 @@ export function createApp(db, config, realtime, services = {}) {
       song,
       message: String(req.body?.message || '').slice(0, 500),
       autoplay: Boolean(req.body?.autoplay),
-      createdAt: new Date(),
+      createdAt: clock(),
       seenAt: null,
       reactions: [],
     };

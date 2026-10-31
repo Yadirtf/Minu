@@ -357,9 +357,9 @@ test('racha: los dos dedican, se olvidan, eligen el reto, lo cumplen escuchando 
 });
 
 test('cápsula: salva la racha cuando los dos sellan sus tres canciones; cinta del mes y misiones', async () => {
-  const a = (await register('lucia')).body.token;
-  const b = (await register('mateo')).body.token;
-  await api('POST', '/partner/request', { username: 'mateo' }, a);
+  const a = (await register('frida')).body.token;
+  const b = (await register('diego')).body.token;
+  await api('POST', '/partner/request', { username: 'diego' }, a);
   await api('POST', '/partner/accept', null, b);
   const song = (id, title) => ({ videoId: id, title, uploader: 'X', durationSec: 200, thumbnailUrl: '' });
   const at = (day) => (fakeNow = new Date(`${day}T15:00:00Z`));
