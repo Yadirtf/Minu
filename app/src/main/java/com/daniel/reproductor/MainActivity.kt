@@ -240,7 +240,7 @@ internal fun AppRoot(
             when (e) {
                 is HubEvent.Message -> snackbar.showSnackbar(e.text)
                 is HubEvent.IncomingDedication -> if (e.dedication.autoplay) liveDedicationId = e.dedication.id
-                is HubEvent.LiveReaction -> Unit
+                is HubEvent.LiveReaction, is HubEvent.AnniversaryChanged -> Unit
                 HubEvent.StreakSaved -> liveSaved = true
             }
         }
