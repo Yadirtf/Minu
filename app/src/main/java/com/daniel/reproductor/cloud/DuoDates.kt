@@ -151,6 +151,10 @@ object DuoPrefs {
     fun celebrated(context: Context) = prefs(context).getString("celebrated", null)
     fun setCelebrated(context: Context, value: String) = prefs(context).edit { putString("celebrated", value) }
 
+    /** Animaciones de la racha ya vistas en este celular: [kind] risk, broken o saved, [value] el día. */
+    fun seen(context: Context, kind: String) = prefs(context).getString("seen_$kind", null)
+    fun setSeen(context: Context, kind: String, value: String) = prefs(context).edit { putString("seen_$kind", value) }
+
     fun notified(context: Context) = prefs(context).getString("notified", null)
     fun setNotified(context: Context, value: String) = prefs(context).edit { putString("notified", value) }
 }

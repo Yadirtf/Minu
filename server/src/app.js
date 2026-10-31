@@ -2,6 +2,7 @@ import express from 'express';
 import bcrypt from 'bcryptjs';
 import { cleanSong, coupleKey, couples, dedications, libraries, publicUser, toId, users } from './db.js';
 import { requireAuth, signToken } from './auth.js';
+import { chooseRescue, giveUpRescue, markDedication, RESCUE_TYPES, streakView, validTimeZone } from './duo.js';
 
 const USERNAME = /^[a-z0-9_.]{3,24}$/;
 const EMOJIS = new Set(['❤️', '😍', '🔥', '😘', '💃', '🎶']);
@@ -13,6 +14,7 @@ const EMOJIS = new Set(['❤️', '😍', '🔥', '😘', '💃', '🎶']);
 export function createApp(db, config, realtime, services = {}) {
   const push = services.push ?? { send: async () => 0 };
   const verifyGoogle = services.verifyGoogle ?? null;
+  const clock = services.clock ?? (() => new Date()); // las pruebas mueven el reloj para simular días
   const allowed = new Set((config.allowedEmails ?? []).map((e) => e.toLowerCase()));
   const app = express();
   app.disable('x-powered-by');
@@ -196,6 +198,9 @@ export function createApp(db, config, realtime, services = {}) {
     if (!me.partnerId) return fail(res, 409, 'Primero vincula a tu pareja.');
     const song = cleanSong(req.body?.song);
     if (!song) return fail(res, 400, 'Canción inválida.');
+    // La primera dedicatoria del día de cada uno es su mitad de la racha
+    const day = await markDedication(db, me._id, me.partnerId, clock());
+    if (day.blocked) return fail(res, 409, 'Hoy toca salvar el hilo con un reto: las dedicatorias vuelven mañana.');
     const dedication = {
       from: me._id,
       to: me.partnerId,
@@ -258,8 +263,39 @@ export function createApp(db, config, realtime, services = {}) {
 
   app.get('/duo', auth, async (req, res) => {
     const me = req.user;
-    if (!me.partnerId) return res.json({ linked: false, origin: null, stats: null });
-    res.json(await duoState(db, me));
+    if (!me.partnerId) return res.json({ linked: false, origin: null, stats: null, streak: null });
+    // El celular manda su zona horaria: el día de la racha va de medianoche a medianoche ahí
+    const tz = req.get('x-timezone');
+    if (validTimeZone(tz)) {
+      await couples(db).updateOne(
+        { _id: coupleKey(me._id, me.partnerId) },
+        { $set: { tz, members: [me._id, me.partnerId] }, $setOnInsert: { createdAt: new Date() } },
+        { upsert: true },
+      );
+    }
+    res.json(await duoState(db, me, clock()));
+  });
+
+  // ---------- Racha: rescates ----------
+
+  app.post('/duo/rescue', auth, async (req, res) => {
+    const me = req.user;
+    if (!me.partnerId) return fail(res, 409, 'Primero vincula a tu pareja.');
+    const type = String(req.body?.type || '');
+    if (!RESCUE_TYPES.has(type)) return fail(res, 400, 'Reto inválido.');
+    const result = await chooseRescue(db, me, type, clock());
+    if (result.error) return fail(res, 409, result.error);
+    if (!realtime.notify(me.partnerId, { type: 'duo.update' })) {
+      await push.send(me.partnerId, { type: 'streak.rescue', fromName: me.displayName, rescue: type });
+    }
+    res.json(await duoState(db, me, clock()));
+  });
+
+  app.post('/duo/rescue/giveup', auth, async (req, res) => {
+    const me = req.user;
+    if (!me.partnerId) return fail(res, 409, 'Primero vincula a tu pareja.');
+    if (await giveUpRescue(db, me, clock())) realtime.notify(me.partnerId, { type: 'duo.update' });
+    res.json(await duoState(db, me, clock()));
   });
 
   // Día en que empezó la relación, la canción de origen y cómo empezó. Es de los dos: cualquiera la cambia.
@@ -288,7 +324,7 @@ export function createApp(db, config, realtime, services = {}) {
     if (!realtime.notify(me.partnerId, { type: 'duo.update' })) {
       await push.send(me.partnerId, { type: 'duo.origin', fromName: me.displayName });
     }
-    res.json(await duoState(db, me));
+    res.json(await duoState(db, me, clock()));
   });
 
   app.use((err, _req, res, _next) => {
@@ -329,7 +365,8 @@ export async function partnerStatus(db, me, realtime) {
   return { status: 'none', partner: null };
 }
 
-async function duoState(db, me) {
+async function duoState(db, me, now = new Date()) {
+  const streak = await streakView(db, me, now);
   const couple = await couples(db).findOne({ _id: coupleKey(me._id, me.partnerId) });
   const o = couple?.origin;
   const between = { $or: [{ from: me._id, to: me.partnerId }, { from: me.partnerId, to: me._id }] };
@@ -345,7 +382,8 @@ async function duoState(db, me) {
           setAt: o.setAt.getTime(),
         }
       : null,
-    stats: { dedications: await dedications(db).countDocuments(between) },
+    stats: { dedications: await dedications(db).countDocuments(between), listenSec: streak.listenSec },
+    streak,
   };
 }
 

@@ -43,7 +43,35 @@ data class DuoOrigin(
     val setByMe: Boolean,
 )
 
-data class DuoInfo(val origin: DuoOrigin?, val dedicationCount: Int)
+/** El reto del día para salvar la racha. type null = todavía no lo eligen. */
+data class StreakRescue(
+    val missedDay: String,
+    val day: String,
+    val type: String?,
+    val chosenByName: String?,
+    val listenedSec: Int,
+    val goalSec: Int,
+)
+
+/** Cuándo y cuánto se perdió (para mostrarlo una vez). reason: timeout, missed, no_rescues, gave_up. */
+data class StreakBroken(val on: String, val lost: Int, val reason: String)
+
+data class DuoStreak(
+    val today: String,
+    val count: Int,
+    val best: Int,
+    val todayMine: Boolean,
+    val todayPartner: Boolean,
+    val state: String, // active, at_risk, rescuing
+    val rescue: StreakRescue?,
+    val rescuesLeft: Int,
+    val broken: StreakBroken?,
+    val savedDay: String?,
+) {
+    val inDanger get() = state != "active"
+}
+
+data class DuoInfo(val origin: DuoOrigin?, val dedicationCount: Int, val listenSec: Long = 0, val streak: DuoStreak? = null)
 
 /** Cliente HTTP del servidor de Minu. */
 class CloudApi(baseClient: OkHttpClient, private val session: Session) {
@@ -125,6 +153,9 @@ class CloudApi(baseClient: OkHttpClient, private val session: Session) {
         )
     )
 
+    suspend fun chooseRescue(type: String): DuoInfo? = parseDuo(call("POST", "/duo/rescue", JSONObject().put("type", type)))
+    suspend fun giveUpRescue(): DuoInfo? = parseDuo(call("POST", "/duo/rescue/giveup", JSONObject()))
+
     private suspend fun call(method: String, path: String, body: JSONObject? = null, auth: Boolean = true): JSONObject =
         withContext(Dispatchers.IO) {
             val token = session.account.value?.token
@@ -133,6 +164,8 @@ class CloudApi(baseClient: OkHttpClient, private val session: Session) {
                 .url(session.serverUrl + path)
                 .method(method, body?.toString()?.toRequestBody(JSON))
                 .apply { if (auth) header("Authorization", "Bearer $token") }
+                // El día de la racha va de medianoche a medianoche en la zona horaria del celular
+                .header("X-Timezone", java.time.ZoneId.systemDefault().id)
                 .build()
             try {
                 client.newCall(request).execute().use { res ->
@@ -190,7 +223,34 @@ class CloudApi(baseClient: OkHttpClient, private val session: Session) {
                     setByMe = o.optBoolean("setByMe"),
                 )
             }
-            return DuoInfo(origin, json.optJSONObject("stats")?.optInt("dedications") ?: 0)
+            val stats = json.optJSONObject("stats")
+            return DuoInfo(origin, stats?.optInt("dedications") ?: 0, stats?.optLong("listenSec") ?: 0, json.optJSONObject("streak")?.let(::parseStreak))
+        }
+
+        private fun parseStreak(s: JSONObject): DuoStreak {
+            val rescue = s.optJSONObject("rescue")?.let { r ->
+                StreakRescue(
+                    missedDay = r.optString("missedDay"),
+                    day = r.optString("day"),
+                    type = r.optString("type").takeIf { !r.isNull("type") && it.isNotBlank() },
+                    chosenByName = r.optString("chosenByName").takeIf { !r.isNull("chosenByName") && it.isNotBlank() },
+                    listenedSec = r.optInt("listenedSec"),
+                    goalSec = r.optInt("goalSec", 1800),
+                )
+            }
+            val broken = s.optJSONObject("broken")?.let { StreakBroken(it.optString("on"), it.optInt("lost"), it.optString("reason")) }
+            return DuoStreak(
+                today = s.optString("today"),
+                count = s.optInt("count"),
+                best = s.optInt("best"),
+                todayMine = s.optBoolean("todayMine"),
+                todayPartner = s.optBoolean("todayPartner"),
+                state = s.optString("state", "active"),
+                rescue = rescue,
+                rescuesLeft = s.optInt("rescuesLeft", 3),
+                broken = broken,
+                savedDay = s.optJSONObject("saved")?.optString("day"),
+            )
         }
 
         fun parseDedication(json: JSONObject): Dedication {

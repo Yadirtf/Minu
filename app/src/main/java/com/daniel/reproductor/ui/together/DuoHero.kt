@@ -66,6 +66,7 @@ import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.daniel.reproductor.cloud.DuoStreak
 import com.daniel.reproductor.cloud.HubEvent
 import com.daniel.reproductor.cloud.PartnerInfo
 import com.daniel.reproductor.ui.theme.LocalAppStyle
@@ -81,6 +82,7 @@ import kotlin.random.Random
 internal val THREAD_RED = Color(0xFFFF3B5C)
 private val THREAD_GLOW = Color(0xFFFF8FA3)
 internal val WARM = Color(0xFFFF9A62)
+private val STREAK_GOLD = Color(0xFFFFC857)
 
 private class Flight(val id: Long, val emoji: String, val fromMe: Boolean)
 private class Burst(val id: Long, val at: Offset)
@@ -104,6 +106,7 @@ fun DuoHero(
     onHeartbeat: (Int) -> Unit,
     onHug: () -> Unit,
     modifier: Modifier = Modifier,
+    streak: DuoStreak? = null,
 ) {
     val c = MaterialTheme.colorScheme
     val style = LocalAppStyle.current
@@ -122,6 +125,7 @@ fun DuoHero(
     val musicPx = with(density) { 6.dp.toPx() }
     val idlePx = with(density) { 1.5.dp.toPx() }
     val labelGap = with(density) { 44.dp.toPx() }
+    val dotGap = with(density) { 18.dp.toPx() }
 
     var box by remember { mutableStateOf(IntSize.Zero) }
     var pull by remember { mutableStateOf(Offset.Zero) } // cuánto arrastraste tu burbuja
@@ -280,8 +284,19 @@ fun DuoHero(
                 if (i == 0) path.moveTo(p.x, p.y) else path.lineTo(p.x, p.y)
             }
             if (linked) {
-                drawPath(path, THREAD_GLOW.copy(alpha = 0.30f), style = Stroke(10.dp.toPx(), cap = StrokeCap.Round))
-                drawPath(path, THREAD_RED, style = Stroke(3.dp.toPx(), cap = StrokeCap.Round))
+                // La racha se nota en el hilo: brilla más con los días, hebras doradas a los 100, todo dorado al año
+                val days = streak?.count ?: 0
+                val color = when {
+                    streak?.inDanger == true -> AMBER
+                    days >= 365 -> STREAK_GOLD
+                    else -> THREAD_RED
+                }
+                val glow = 0.30f + 0.25f * (days.coerceAtMost(30) / 30f)
+                drawPath(path, THREAD_GLOW.copy(alpha = glow), style = Stroke((10 + 4 * (days.coerceAtMost(30) / 30f)).dp.toPx(), cap = StrokeCap.Round))
+                drawPath(path, color, style = Stroke(3.dp.toPx(), cap = StrokeCap.Round))
+                if (days in 100 until 365) {
+                    drawPath(path, STREAK_GOLD, style = Stroke(1.dp.toPx(), cap = StrokeCap.Round, pathEffect = PathEffect.dashPathEffect(floatArrayOf(14f, 10f), phase * 6f)))
+                }
                 val k = threadPoint(a, b, 0.5f, s, w, phase)
                 val beat = if (holding) 1f + 0.12f * sin(phase * 4f) else 1f + 0.05f * breathe
                 drawCircle(THREAD_GLOW, radius = 22.dp.toPx() * knotScale, center = k, alpha = 0.18f + 0.3f * hold)
@@ -314,6 +329,19 @@ fun DuoHero(
         }
         Label("Tú", 13, c.onSurface) { myPos() + Offset(0f, labelGap) }
         Label(partner?.displayName ?: "Tu persona", 13, c.onSurface) { partnerPos() + Offset(0f, labelGap) }
+        if (linked && streak != null) {
+            // El número de la racha bajo el nudo y, bajo cada nombre, si ya dedicó hoy
+            val numberColor = if (streak.inDanger) AMBER else THREAD_RED
+            Label(if (streak.count == 1) "1 día" else "${streak.count} días", 15, numberColor) { knot() + Offset(0f, dotGap * 1.6f) }
+            if (!streak.inDanger) {
+                Label(if (streak.todayMine) "● dedicaste" else "○ te falta", 11, if (streak.todayMine) THREAD_RED else c.onSurfaceVariant) {
+                    myPos() + Offset(0f, labelGap + dotGap)
+                }
+                Label(if (streak.todayPartner) "● dedicó" else "○ le falta", 11, if (streak.todayPartner) THREAD_RED else c.onSurfaceVariant) {
+                    partnerPos() + Offset(0f, labelGap + dotGap)
+                }
+            }
+        }
 
         // Destellos de corazones (abrazos y latidos)
         bursts.toList().forEach { burst ->

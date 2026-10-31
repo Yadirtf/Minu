@@ -120,6 +120,9 @@ class TogetherViewModel(
     fun saveOrigin(startedOn: String, song: Song?, story: String) =
         action("Guardado. Su hilo ya sabe desde cuándo los une 💞") { hub.saveOrigin(startedOn, song, story) }
 
+    fun chooseRescue(type: String) = action { hub.chooseRescue(type) }
+    fun giveUpRescue() = action { hub.giveUpRescue() }
+
     fun playSong(song: Song) = viewModelScope.launch { runCatching { hub.playSong(song) } }
 
     fun react(dedication: Dedication, emoji: String) = hub.react(dedication, emoji)

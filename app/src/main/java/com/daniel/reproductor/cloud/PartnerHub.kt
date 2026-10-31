@@ -49,6 +49,8 @@ sealed interface HubEvent {
     data class IncomingDedication(val dedication: Dedication) : HubEvent
     data class LiveReaction(val emoji: String, val fromMe: Boolean) : HubEvent
     data class Message(val text: String) : HubEvent
+    /** Cumplieron el reto: el hilo se vuelve a anudar en vivo. */
+    data object StreakSaved : HubEvent
 }
 
 /**
@@ -132,6 +134,14 @@ class PartnerHub(
     // ---------- Nuestra fecha ----------
 
     suspend fun saveOrigin(startedOn: String, song: Song?, story: String) = setDuo(api.saveOrigin(startedOn, song, story))
+    suspend fun chooseRescue(type: String) = setDuo(api.chooseRescue(type))
+    suspend fun giveUpRescue() = setDuo(api.giveUpRescue())
+
+    /** Solo lo de Dúo (racha y fecha), sin pedir de nuevo pareja y cartas. */
+    fun refreshDuo() {
+        if (_partner.value?.linked != true) return
+        scope.launch { runCatching { setDuo(api.duo()) } }
+    }
 
     /** También la guarda en el celular para los avisos de mesiversario (con la app cerrada). */
     private fun setDuo(info: DuoInfo?) {
@@ -154,6 +164,7 @@ class PartnerHub(
     suspend fun sendDedication(song: Song, message: String, autoplay: Boolean): Boolean {
         val (dedication, delivered) = api.sendDedication(song, message, autoplay)
         _dedications.update { listOf(dedication) + it }
+        refreshDuo() // tu mitad del día en la racha
         return delivered
     }
 
@@ -296,7 +307,12 @@ class PartnerHub(
     private suspend fun handle(msg: JSONObject) {
         when (msg.optString("type")) {
             "pong" -> latencyMs = ((System.currentTimeMillis() - msg.optLong("t")) / 2).coerceIn(0, 2_000)
-            "hello", "partner.update", "duo.update" -> refresh()
+            "hello", "partner.update" -> refresh()
+            "duo.update" -> refreshDuo()
+            "streak.saved" -> {
+                refreshDuo()
+                _events.tryEmit(HubEvent.StreakSaved)
+            }
             "presence" -> {
                 val online = msg.optBoolean("online")
                 _partner.update { p -> p?.copy(partner = p.partner?.copy(online = online)) }
@@ -307,6 +323,7 @@ class PartnerHub(
             "dedication" -> {
                 val d = CloudApi.parseDedication(msg.getJSONObject("dedication"))
                 upsert(d)
+                refreshDuo() // su mitad del día en la racha
                 _events.tryEmit(HubEvent.IncomingDedication(d))
                 if (d.autoplay) runCatching { playSong(d.song) }
             }

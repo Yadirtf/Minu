@@ -86,6 +86,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.daniel.reproductor.cloud.Dedication
+import com.daniel.reproductor.cloud.DuoStreak
 import com.daniel.reproductor.cloud.ListenMode
 import com.daniel.reproductor.cloud.ListenSession
 import com.daniel.reproductor.cloud.PartnerInfo
@@ -160,6 +161,7 @@ fun TogetherScreen(vm: TogetherViewModel, lib: LibraryViewModel, player: PlayerS
                 events = vm.events,
                 onHeartbeat = { vm.sendHeartbeats(it) },
                 onHug = { vm.sendLiveReaction(TogetherViewModel.HUG) },
+                streak = duo?.streak?.takeIf { linkedPartner != null },
             )
         }
         if (linkedPartner != null) item { OriginLine(duo, onEdit = { editingOrigin = true }) }
@@ -195,6 +197,7 @@ fun TogetherScreen(vm: TogetherViewModel, lib: LibraryViewModel, player: PlayerS
             }
             linkedPartner != null -> {
                 val p = linkedPartner
+                duo?.streak?.takeIf { it.inDanger }?.let { streak -> item { RescueCard(vm, streak, p, listen) } }
                 item { DuoActions(vm, p, listen, onDedicate = { dedicating = true }) }
                 if (listen.mode == ListenMode.INVITED || listen.active) {
                     item { ListenCard(vm, p, listen, player, save) }
@@ -290,6 +293,38 @@ private fun InfoCard(title: String, text: String, content: @Composable () -> Uni
             Text(text, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
             Spacer(Modifier.height(16.dp))
             content()
+        }
+    }
+}
+
+/** El día del reto: qué toca para salvar el hilo y cuánto llevan. */
+@Composable
+private fun RescueCard(vm: TogetherViewModel, streak: DuoStreak, partner: PartnerInfo, listen: ListenSession) {
+    val rescue = streak.rescue ?: return
+    if (rescue.type == null) {
+        InfoCard(
+            "🧵 El hilo se está deshilachando",
+            "Ayer no se dedicaron los dos una canción. Hoy pueden salvar sus ${streak.count} días con un reto " +
+                "(les ${if (streak.rescuesLeft == 1) "queda 1 rescate" else "quedan ${streak.rescuesLeft} rescates"} este mes).",
+        ) {
+            PillButton("Media hora en la misma canción", Icons.Default.Headphones, { vm.chooseRescue("listen") }, Modifier.fillMaxWidth())
+            TextButton(onClick = vm::giveUpRescue, modifier = Modifier.fillMaxWidth()) { Text("Dejar que se rompa") }
+        }
+        return
+    }
+    val minutes = rescue.listenedSec / 60
+    val goal = rescue.goalSec / 60
+    InfoCard(
+        "🧵 En rescate: $minutes de $goal minutos juntos",
+        "Escuchen juntos con los dos conectados y la música sonando. Hoy no se puede dedicar: el reto es la dedicatoria.",
+    ) {
+        LinearProgressIndicator(
+            progress = { (rescue.listenedSec.toFloat() / rescue.goalSec).coerceIn(0f, 1f) },
+            color = AMBER, modifier = Modifier.fillMaxWidth().height(8.dp).clip(RoundedCornerShape(4.dp)),
+        )
+        if (listen.mode == ListenMode.NONE) {
+            Spacer(Modifier.height(14.dp))
+            PillButton("Invitar a ${partner.displayName} a escuchar", Icons.Default.Headphones, vm::inviteListen, Modifier.fillMaxWidth())
         }
     }
 }

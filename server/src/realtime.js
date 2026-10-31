@@ -1,6 +1,7 @@
 import { WebSocketServer } from 'ws';
 import { userFromToken } from './auth.js';
-import { users } from './db.js';
+import { coupleKey, users } from './db.js';
+import { addListening } from './duo.js';
 
 /** Mensajes que un celular puede reenviar a su pareja. */
 const RELAYED = new Set([
@@ -29,6 +30,40 @@ export function attachRealtime(server, db, config, push = { send: async () => 0 
     const data = JSON.stringify({ ...message, serverTime: Date.now() });
     for (const ws of set) if (ws.readyState === ws.OPEN) ws.send(data);
     return true;
+  };
+
+  /**
+   * Medidor de "escuchar juntos": por pareja, si suena música (según el DJ) y los dos están
+   * conectados, suma el tiempo. Se guarda cada 30 s (total de la pareja y Reto 1).
+   */
+  const listening = new Map(); // coupleKey -> { a, b, playing, at, pendingMs }
+  const flush = async (key) => {
+    const entry = listening.get(key);
+    if (!entry || entry.pendingMs < 1000) return;
+    const seconds = Math.floor(entry.pendingMs / 1000);
+    entry.pendingMs -= seconds * 1000;
+    const saved = await addListening(db, entry.a, entry.b, seconds).catch(() => false);
+    notify(entry.a, { type: saved ? 'streak.saved' : 'duo.update' });
+    notify(entry.b, { type: saved ? 'streak.saved' : 'duo.update' });
+  };
+  const track = async (user, partner, type, state) => {
+    const key = coupleKey(user._id, partner);
+    const now = Date.now();
+    if (type === 'listen.join') {
+      listening.set(key, { a: user._id, b: partner, playing: false, at: now, pendingMs: 0 });
+      return;
+    }
+    const entry = listening.get(key);
+    if (!entry) return;
+    if (entry.playing && isOnline(entry.a) && isOnline(entry.b)) entry.pendingMs += Math.min(now - entry.at, 10_000);
+    entry.at = now;
+    if (type === 'listen.state') entry.playing = Boolean(state?.playing);
+    if (type === 'listen.leave') {
+      await flush(key);
+      listening.delete(key);
+    } else if (entry.pendingMs >= 30_000) {
+      await flush(key);
+    }
   };
 
   const partnerOf = async (userId) => (await users(db).findOne({ _id: userId }, { projection: { partnerId: 1 } }))?.partnerId;
@@ -69,6 +104,7 @@ export function attachRealtime(server, db, config, push = { send: async () => 0 
       const partner = await partnerOf(user._id).catch(() => null);
       if (!partner) return;
       const { type, state, emoji, title } = msg;
+      if (type.startsWith('listen.')) track(user, partner, type, state).catch(() => {});
       const delivered = notify(partner, {
         type,
         state,
@@ -86,7 +122,12 @@ export function attachRealtime(server, db, config, push = { send: async () => 0 
       if (set && set.size === 0) {
         sockets.delete(id);
         const partner = await partnerOf(user._id).catch(() => null);
-        if (partner) notify(partner, { type: 'presence', online: false });
+        if (partner) {
+          notify(partner, { type: 'presence', online: false });
+          const key = coupleKey(user._id, partner);
+          await flush(key).catch(() => {});
+          listening.delete(key);
+        }
       }
     });
     // Los listeners ya están puestos (antes de cualquier await, para no perder mensajes)
