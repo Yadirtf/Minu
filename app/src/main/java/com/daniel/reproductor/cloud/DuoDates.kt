@@ -115,7 +115,7 @@ object DuoDates {
     /** Una idea para hacer ese día, siempre con música (las misiones del mes). */
     fun idea(m: DuoMilestone): String = when (m) {
         is DuoMilestone.Anniversary -> "Recreen su primera cita con la canción de origen sonando."
-        is DuoMilestone.Days -> "Escuchen juntos las canciones que más se han dedicado."
+        is DuoMilestone.Days -> if (m.days >= 1000) "Hagan una lista con una canción de cada mes que llevan juntos y escúchenla de principio a fin." else "Escuchen juntos las canciones que más se han dedicado."
         is DuoMilestone.Monthsary -> mission(m.months)
     }
 
@@ -187,7 +187,7 @@ class DuoReminderWorker(context: Context, params: WorkerParameters) : CoroutineW
         if (DuoPrefs.notified(applicationContext) == mark) return Result.success()
         DuoPrefs.setNotified(applicationContext, mark)
         val text = when (milestone) {
-            is DuoMilestone.Anniversary -> "Abran Minu: hay algo esperándolos."
+            is DuoMilestone.Anniversary -> "Hay algo esperándolos en Minu, pero solo se abre con los dos."
             is DuoMilestone.Monthsary -> "Su hilo tiene un nudo nuevo. ${DuoDates.idea(milestone)}"
             is DuoMilestone.Days -> "Abran Minu para celebrarlo."
         }

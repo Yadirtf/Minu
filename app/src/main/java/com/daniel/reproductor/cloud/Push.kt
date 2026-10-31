@@ -125,6 +125,8 @@ class MinuMessagingService : FirebaseMessagingService() {
             "capsule.sealed" -> notify(7, Push.CHANNEL_TOGETHER, "💌 $from selló su cápsula", "Te toca: responde tus tres canciones y se abrirá para los dos.")
             "capsule.opened" -> notify(7, Push.CHANNEL_TOGETHER, "✨ Su cápsula se abrió", "Salvaron el hilo. Entra a Dúo para ver qué respondió $from.")
             "mission.done" -> notify(8, Push.CHANNEL_TOGETHER, "🎶 $from marcó la misión del mes", "Si ya la hicieron, márcala tú también en Dúo.")
+            "anniversary.hug" -> notify(9, Push.CHANNEL_TOGETHER, "🎁 $from te está abrazando en el hilo", "Abre Minu y abraza tú también: su aniversario solo se abre con los dos.")
+            "letter.sealed" -> notify(10, Push.CHANNEL_TOGETHER, "💌 $from selló una carta para su aniversario", "Se abrirá el día que lo abran juntos.")
             "duo.origin" -> notify(5, Push.CHANNEL_TOGETHER, "💞 $from guardó el día en que empezó todo", "Abre Dúo para ver cuánto tiempo llevan juntos.")
             "listen.invite" -> notify(
                 4, Push.CHANNEL_TOGETHER, "🎧 $from quiere escuchar música contigo", "Toca para unirte.",

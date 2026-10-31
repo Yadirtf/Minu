@@ -133,7 +133,16 @@ fun MilestoneOverlay(
                 drawCircle(thread, radius = 4.dp.toPx() * pop, center = at(t))
                 if (today) drawCircle(thread, radius = 11.dp.toPx() * pop, center = at(t), alpha = 0.25f)
             }
-            if (knots == 0 && drawn >= 0.5f) drawHeart(at(0.5f), 30.dp.toPx() * (0.6f + 0.4f * reveal.value), thread)
+            // Días redondos: un corazón en el hilo por cada 100 días (100 = 1, 500 = 5, 1000 = 10)
+            if (milestone is DuoMilestone.Days) {
+                val hearts = (milestone.days / 100).toInt().coerceIn(1, 10)
+                for (h in 0 until hearts) {
+                    val t = if (hearts == 1) 0.5f else 0.1f + 0.8f * h / (hearts - 1)
+                    if (drawn < t) continue
+                    val beat = 1f + 0.12f * sin(time * 4f + h)
+                    drawHeart(at(t), (if (hearts == 1) 30.dp else 16.dp).toPx() * (0.6f + 0.4f * reveal.value) * beat, if (milestone.days >= 1000) GOLD else thread)
+                }
+            }
             // Corazones y destellos que suben cuando aparece el número
             if (reveal.value > 0.05f) {
                 val since = time - DRAW_SECONDS

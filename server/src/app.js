@@ -3,6 +3,7 @@ import bcrypt from 'bcryptjs';
 import { cleanSong, coupleKey, couples, dedications, libraries, publicUser, toId, users } from './db.js';
 import { requireAuth, signToken } from './auth.js';
 import { chooseRescue, giveUpRescue, markDedication, refreshStreak, RESCUE_TYPES, streakView, validTimeZone } from './duo.js';
+import { anniversariesView, anniversaryView, hug, openSolo, sealedLetters, voteSong, writeLetter } from './anniversary.js';
 import { answerCapsule, ensureCapsule, missionsView, mixtape, markMission, openedCapsules, serializeCapsule } from './memories.js';
 
 const USERNAME = /^[a-z0-9_.]{3,24}$/;
@@ -353,6 +354,73 @@ export function createApp(db, config, realtime, services = {}) {
     res.json(await duoState(db, me, clock()));
   });
 
+  // ---------- Aniversario: se abre con un abrazo de los dos ----------
+
+  const yearsParam = (req) => {
+    const n = Number(req.params.years);
+    return Number.isInteger(n) && n >= 1 && n <= 100 ? n : null;
+  };
+
+  app.get('/duo/anniversary/:years', auth, async (req, res) => {
+    const me = req.user;
+    if (!me.partnerId) return fail(res, 409, 'Primero vincula a tu pareja.');
+    const years = yearsParam(req);
+    if (!years) return fail(res, 400, 'Año inválido.');
+    const view = await anniversaryView(db, me, years, clock());
+    if (view.error) return fail(res, 409, view.error);
+    res.json({ anniversary: view });
+  });
+
+  // El celular lo repite cada pocos segundos mientras mantienen el abrazo
+  app.post('/duo/anniversary/:years/hug', auth, async (req, res) => {
+    const me = req.user;
+    if (!me.partnerId) return fail(res, 409, 'Primero vincula a tu pareja.');
+    const years = yearsParam(req);
+    if (!years) return fail(res, 400, 'Año inválido.');
+    const result = await hug(db, me, years, clock());
+    if (result.error) return fail(res, 409, result.error);
+    if (result.opened) {
+      realtime.notify(me.partnerId, { type: 'anniversary.opened', years });
+    } else if (!realtime.notify(me.partnerId, { type: 'anniversary.hug', years, fromName: me.displayName })) {
+      await push.send(me.partnerId, { type: 'anniversary.hug', fromName: me.displayName, years });
+    }
+    res.json({ anniversary: await anniversaryView(db, me, years, clock()) });
+  });
+
+  app.post('/duo/anniversary/:years/open', auth, async (req, res) => {
+    const me = req.user;
+    if (!me.partnerId) return fail(res, 409, 'Primero vincula a tu pareja.');
+    const years = yearsParam(req);
+    if (!years) return fail(res, 400, 'Año inválido.');
+    const result = await openSolo(db, me, years, clock());
+    if (result.error) return fail(res, 409, result.error);
+    realtime.notify(me.partnerId, { type: 'duo.update' });
+    res.json({ anniversary: await anniversaryView(db, me, years, clock()) });
+  });
+
+  app.post('/duo/anniversary/:years/vote', auth, async (req, res) => {
+    const me = req.user;
+    if (!me.partnerId) return fail(res, 409, 'Primero vincula a tu pareja.');
+    const years = yearsParam(req);
+    if (!years) return fail(res, 400, 'Año inválido.');
+    const result = await voteSong(db, me, years, String(req.body?.videoId || ''), clock());
+    if (result.error) return fail(res, 409, result.error);
+    realtime.notify(me.partnerId, { type: 'anniversary.vote', years });
+    res.json({ anniversary: await anniversaryView(db, me, years, clock()) });
+  });
+
+  // Carta para el próximo aniversario: sellada hasta que lo abran
+  app.put('/duo/letter', auth, async (req, res) => {
+    const me = req.user;
+    if (!me.partnerId) return fail(res, 409, 'Primero vincula a tu pareja.');
+    const result = await writeLetter(db, me, req.body?.text, clock());
+    if (result.error) return fail(res, 409, result.error);
+    if (!realtime.notify(me.partnerId, { type: 'duo.update' })) {
+      await push.send(me.partnerId, { type: 'letter.sealed', fromName: me.displayName });
+    }
+    res.json(await duoState(db, me, clock()));
+  });
+
   app.post('/duo/rescue/giveup', auth, async (req, res) => {
     const me = req.user;
     if (!me.partnerId) return fail(res, 409, 'Primero vincula a tu pareja.');
@@ -446,6 +514,8 @@ async function duoState(db, me, now = new Date()) {
       : null,
     stats: { dedications: await dedications(db).countDocuments(between), listenSec: streak.listenSec },
     missions: missionsView(couple, me._id, me.partnerId),
+    anniversaries: anniversariesView(couple, streak.today),
+    letter: await sealedLetters(db, me, now),
     streak,
   };
 }

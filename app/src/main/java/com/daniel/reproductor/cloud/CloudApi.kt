@@ -82,6 +82,45 @@ data class DuoInfo(
     val listenSec: Long = 0,
     val streak: DuoStreak? = null,
     val missions: Map<Int, MissionState> = emptyMap(),
+    val anniversaries: List<AnniversaryEntry> = emptyList(),
+    val letter: SealedLetter? = null,
+)
+
+/** Un aniversario cumplido: [opened] cuando ya lo abrieron (con el abrazo o solos). */
+data class AnniversaryEntry(val years: Int, val date: String, val opened: Boolean)
+
+/** Mi carta para el próximo aniversario, sellada hasta que lo abran. */
+data class SealedLetter(val year: Int, val opensOn: String, val mine: String?, val partnerWrote: Boolean)
+
+data class TopSong(val song: Song, val count: Int)
+data class FirstDedication(val song: Song, val message: String, val fromMe: Boolean, val day: String)
+data class Letter(val fromMe: Boolean, val text: String)
+data class SongVote(val mine: String?, val partner: String?, val song: Song?)
+
+/** Las historias del año: llegan solo cuando el aniversario se abrió. */
+data class YearStory(
+    val from: String,
+    val originStory: String,
+    val originSong: Song?,
+    val first: FirstDedication?,
+    val dedications: Int,
+    val mine: Int,
+    val top: List<TopSong>,
+    val listenSec: Long,
+    val bestStreak: Int,
+    val saves: Int,
+    val capsules: List<Capsule>,
+    val letters: List<Letter>,
+    val vote: SongVote,
+)
+
+data class AnniversaryGift(
+    val years: Int,
+    val date: String,
+    val openedAt: Long?,
+    val partnerHugging: Boolean,
+    val canOpenSolo: Boolean,
+    val story: YearStory?,
 )
 
 data class CapsuleAnswer(val song: Song, val note: String)
@@ -215,6 +254,13 @@ class CloudApi(baseClient: OkHttpClient, private val session: Session) {
         return Mixtape(from, to, side("sideA"), side("sideB"))
     }
 
+    suspend fun anniversary(years: Int): AnniversaryGift = parseAnniversary(call("GET", "/duo/anniversary/$years"))
+    suspend fun hug(years: Int): AnniversaryGift = parseAnniversary(call("POST", "/duo/anniversary/$years/hug", JSONObject()))
+    suspend fun openAnniversary(years: Int): AnniversaryGift = parseAnniversary(call("POST", "/duo/anniversary/$years/open", JSONObject()))
+    suspend fun voteSong(years: Int, videoId: String): Anniversary =
+        parseAnniversary(call("POST", "/duo/anniversary/$years/vote", JSONObject().put("videoId", videoId)))
+    suspend fun writeLetter(text: String): DuoInfo? = parseDuo(call("PUT", "/duo/letter", JSONObject().put("text", text)))
+
     suspend fun markMission(month: Int, done: Boolean): DuoInfo? =
         parseDuo(call("POST", "/duo/missions/$month", JSONObject().put("done", done)))
 
@@ -295,6 +341,53 @@ class CloudApi(baseClient: OkHttpClient, private val session: Session) {
             return DuoInfo(
                 origin, stats?.optInt("dedications") ?: 0, stats?.optLong("listenSec") ?: 0,
                 json.optJSONObject("streak")?.let(::parseStreak), missions,
+                anniversaries = objects(json.optJSONArray("anniversaries")).map {
+                    AnniversaryEntry(it.getInt("years"), it.optString("date"), it.optBoolean("opened"))
+                },
+                letter = json.optJSONObject("letter")?.let {
+                    SealedLetter(it.getInt("year"), it.optString("opensOn"), it.optStringOrNull("mine"), it.optBoolean("partnerWrote"))
+                },
+            )
+        }
+
+        private fun objects(array: JSONArray?): List<JSONObject> =
+            array?.let { a -> (0 until a.length()).map { a.getJSONObject(it) } } ?: emptyList()
+
+        private fun JSONObject.optStringOrNull(name: String) = if (isNull(name)) null else optString(name)
+
+        fun parseAnniversary(json: JSONObject): AnniversaryGift {
+            val a = json.getJSONObject("anniversary")
+            val story = a.optJSONObject("story")?.let { s ->
+                val d = s.optJSONObject("dedications")
+                val v = s.optJSONObject("vote")
+                YearStory(
+                    from = s.optString("from"),
+                    originStory = s.optString("originStory"),
+                    originSong = s.optJSONObject("originSong")?.let(::parseSong),
+                    first = s.optJSONObject("first")?.let {
+                        FirstDedication(parseSong(it.getJSONObject("song")), it.optString("message"), it.optBoolean("fromMe"), it.optString("day"))
+                    },
+                    dedications = d?.optInt("total") ?: 0,
+                    mine = d?.optInt("mine") ?: 0,
+                    top = objects(s.optJSONArray("top")).map { TopSong(parseSong(it.getJSONObject("song")), it.optInt("count")) },
+                    listenSec = s.optLong("listenSec"),
+                    bestStreak = s.optInt("bestStreak"),
+                    saves = s.optInt("saves"),
+                    capsules = objects(s.optJSONArray("capsules")).map(::parseCapsule),
+                    letters = objects(s.optJSONArray("letters")).map { Letter(it.optBoolean("fromMe"), it.optString("text")) },
+                    vote = SongVote(
+                        v?.optStringOrNull("mine"), v?.optStringOrNull("partner"),
+                        v?.optJSONObject("song")?.let(::parseSong),
+                    ),
+                )
+            }
+            return AnniversaryGift(
+                years = a.getInt("years"),
+                date = a.optString("date"),
+                openedAt = a.optLong("openedAt").takeIf { it > 0 },
+                partnerHugging = a.optBoolean("partnerHugging"),
+                canOpenSolo = a.optBoolean("canOpenSolo"),
+                story = story,
             )
         }
 
