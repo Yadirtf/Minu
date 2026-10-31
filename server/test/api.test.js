@@ -483,9 +483,9 @@ test('aniversario: se abre con el abrazo de los dos, cuenta su año, abre las ca
 });
 
 test('aniversario: los que vivieron antes de llegar a Minu se marcan y no se abren', async () => {
-  const a = (await register('isolda')).body.token;
-  const b = (await register('tristan')).body.token;
-  await api('POST', '/partner/request', { username: 'tristan' }, a);
+  const a = (await register('amelie')).body.token;
+  const b = (await register('nino')).body.token;
+  await api('POST', '/partner/request', { username: 'nino' }, a);
   await api('POST', '/partner/accept', null, b);
   const song = { videoId: 'aaaaaaaaaaa', title: 'La nuestra', uploader: 'X', durationSec: 200, thumbnailUrl: '' };
   try {
