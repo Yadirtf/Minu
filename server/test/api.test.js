@@ -249,3 +249,36 @@ test('cuenta de servicio: acepta JSON o base64 y nunca lanza el texto', async ()
   assert.deepEqual(parseServiceAccount(Buffer.from(JSON.stringify(account)).toString('base64')), account);
   assert.equal(parseServiceAccount('basura-secreta'), null);
 });
+
+test('nuestra fecha: la guarda uno, la ve el otro y sobrevive a desvincularse', async () => {
+  const romeo = (await register('romeo')).body.token;
+  const julieta = (await register('julieta')).body.token;
+  assert.equal((await api('GET', '/duo', null, romeo)).body.linked, false);
+  assert.equal((await api('PUT', '/duo/origin', { startedOn: '2025-02-14' }, romeo)).status, 409);
+
+  await api('POST', '/partner/request', { username: 'julieta' }, romeo);
+  await api('POST', '/partner/accept', null, julieta);
+  assert.equal((await api('GET', '/duo', null, romeo)).body.origin, null);
+
+  assert.equal((await api('PUT', '/duo/origin', { startedOn: '2025-02-30' }, romeo)).status, 400);
+  assert.equal((await api('PUT', '/duo/origin', { startedOn: '2999-01-01' }, romeo)).status, 400);
+  assert.equal((await api('PUT', '/duo/origin', { startedOn: '2025-02-14', song: { videoId: 'malo' } }, romeo)).status, 400);
+
+  const song = { videoId: 'dQw4w9WgXcQ', title: 'Nuestra canción', uploader: 'Alguien', durationSec: 200, thumbnailUrl: '' };
+  const saved = await api('PUT', '/duo/origin', { startedOn: '2025-02-14', song, story: 'En la fiesta, bailando mal a propósito' }, romeo);
+  assert.equal(saved.status, 200);
+  assert.equal(saved.body.origin.setByMe, true);
+
+  await api('POST', '/dedications', { song }, julieta);
+  const seen = (await api('GET', '/duo', null, julieta)).body;
+  assert.equal(seen.origin.startedOn, '2025-02-14');
+  assert.equal(seen.origin.song.title, 'Nuestra canción');
+  assert.equal(seen.origin.setByMe, false);
+  assert.equal(seen.origin.setByName, 'romeo');
+  assert.equal(seen.stats.dedications, 1);
+
+  await api('DELETE', '/partner', null, romeo);
+  await api('POST', '/partner/request', { username: 'julieta' }, romeo);
+  await api('POST', '/partner/accept', null, julieta);
+  assert.equal((await api('GET', '/duo', null, romeo)).body.origin.startedOn, '2025-02-14');
+});

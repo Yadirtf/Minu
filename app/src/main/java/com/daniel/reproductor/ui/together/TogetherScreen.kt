@@ -121,6 +121,8 @@ fun TogetherScreen(vm: TogetherViewModel, lib: LibraryViewModel, player: PlayerS
     val savedIds by lib.savedIds.collectAsStateWithLifecycle()
     var dedicating by remember { mutableStateOf(false) }
     var confirmUnlink by remember { mutableStateOf(false) }
+    var editingOrigin by remember { mutableStateOf(false) }
+    val duo by vm.duo.collectAsStateWithLifecycle()
     val saveSheet = rememberSaveToPlaylistState()
     val save = player?.takeIf { it.hasMedia }?.let { p ->
         SaveAction(saved = p.currentVideoId in savedIds) { saveSheet.open(p.currentSong()) }
@@ -160,6 +162,7 @@ fun TogetherScreen(vm: TogetherViewModel, lib: LibraryViewModel, player: PlayerS
                 onHug = { vm.sendLiveReaction(TogetherViewModel.HUG) },
             )
         }
+        if (linkedPartner != null) item { OriginLine(duo, onEdit = { editingOrigin = true }) }
 
         when {
             user == null -> item {
@@ -228,6 +231,16 @@ fun TogetherScreen(vm: TogetherViewModel, lib: LibraryViewModel, player: PlayerS
             partnerName = partner?.partner?.displayName.orEmpty(),
             onDismiss = { dedicating = false },
             onSend = { song, message, autoplay -> vm.sendDedication(song, message, autoplay); dedicating = false },
+        )
+    }
+
+    if (editingOrigin) {
+        OriginSheet(
+            origin = duo?.origin,
+            partnerName = partner?.partner?.displayName.orEmpty(),
+            lib = lib,
+            onDismiss = { editingOrigin = false },
+            onSave = { startedOn, song, story -> vm.saveOrigin(startedOn, song, story); editingOrigin = false },
         )
     }
 

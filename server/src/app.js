@@ -1,6 +1,6 @@
 import express from 'express';
 import bcrypt from 'bcryptjs';
-import { cleanSong, dedications, libraries, publicUser, toId, users } from './db.js';
+import { cleanSong, coupleKey, couples, dedications, libraries, publicUser, toId, users } from './db.js';
 import { requireAuth, signToken } from './auth.js';
 
 const USERNAME = /^[a-z0-9_.]{3,24}$/;
@@ -254,6 +254,43 @@ export function createApp(db, config, realtime, services = {}) {
     res.json({ dedication: serializeDedication(d, req.user._id) });
   });
 
+  // ---------- Nuestra fecha (Dúo) ----------
+
+  app.get('/duo', auth, async (req, res) => {
+    const me = req.user;
+    if (!me.partnerId) return res.json({ linked: false, origin: null, stats: null });
+    res.json(await duoState(db, me));
+  });
+
+  // Día en que empezó la relación, la canción de origen y cómo empezó. Es de los dos: cualquiera la cambia.
+  app.put('/duo/origin', auth, async (req, res) => {
+    const me = req.user;
+    if (!me.partnerId) return fail(res, 409, 'Primero vincula a tu pareja.');
+    const startedOn = String(req.body?.startedOn || '');
+    if (!validDay(startedOn)) return fail(res, 400, 'Fecha inválida.');
+    const rawSong = req.body?.song;
+    const song = rawSong ? cleanSong(rawSong) : null;
+    if (rawSong && !song) return fail(res, 400, 'Canción inválida.');
+    const origin = {
+      startedOn,
+      song,
+      story: String(req.body?.story || '').trim().slice(0, 140),
+      setBy: me._id,
+      setByName: me.displayName,
+      setAt: new Date(),
+    };
+    const key = coupleKey(me._id, me.partnerId);
+    await couples(db).updateOne(
+      { _id: key },
+      { $set: { origin, members: [me._id, me.partnerId] }, $setOnInsert: { createdAt: new Date() } },
+      { upsert: true },
+    );
+    if (!realtime.notify(me.partnerId, { type: 'duo.update' })) {
+      await push.send(me.partnerId, { type: 'duo.origin', fromName: me.displayName });
+    }
+    res.json(await duoState(db, me));
+  });
+
   app.use((err, _req, res, _next) => {
     if (err.type === 'entity.too.large') return fail(res, 413, 'Los datos son demasiado grandes.');
     if (err.type === 'entity.parse.failed') return fail(res, 400, 'JSON inválido.');
@@ -290,6 +327,34 @@ export async function partnerStatus(db, me, realtime) {
   const requester = await users(db).findOne({ partnerRequestTo: me._id, partnerId: null });
   if (requester) return { status: 'received', partner: publicUser(requester) };
   return { status: 'none', partner: null };
+}
+
+async function duoState(db, me) {
+  const couple = await couples(db).findOne({ _id: coupleKey(me._id, me.partnerId) });
+  const o = couple?.origin;
+  const between = { $or: [{ from: me._id, to: me.partnerId }, { from: me.partnerId, to: me._id }] };
+  return {
+    linked: true,
+    origin: o
+      ? {
+          startedOn: o.startedOn,
+          song: o.song ?? null,
+          story: o.story ?? '',
+          setByName: o.setByName,
+          setByMe: o.setBy.equals(me._id),
+          setAt: o.setAt.getTime(),
+        }
+      : null,
+    stats: { dedications: await dedications(db).countDocuments(between) },
+  };
+}
+
+/** "AAAA-MM-DD" que existe en el calendario, desde 1950 y no más allá de mañana (por las zonas horarias). */
+function validDay(value) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
+  const date = new Date(`${value}T00:00:00Z`);
+  if (Number.isNaN(date.getTime()) || date.toISOString().slice(0, 10) !== value) return false;
+  return value >= '1950-01-01' && date.getTime() <= Date.now() + 36 * 3600_000;
 }
 
 function serializeDedication(d, viewer) {

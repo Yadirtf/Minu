@@ -8,6 +8,7 @@ import com.daniel.reproductor.cloud.Account
 import com.daniel.reproductor.cloud.CloudApi
 import com.daniel.reproductor.cloud.CloudSync
 import com.daniel.reproductor.cloud.Dedication
+import com.daniel.reproductor.cloud.DuoInfo
 import com.daniel.reproductor.cloud.HubEvent
 import com.daniel.reproductor.cloud.ListenSession
 import com.daniel.reproductor.cloud.PartnerHub
@@ -43,6 +44,7 @@ class TogetherViewModel(
     val dedications: StateFlow<List<Dedication>> = hub.dedications
     val listen: StateFlow<ListenSession> = hub.listen
     val connected: StateFlow<Boolean> = hub.connected
+    val duo: StateFlow<DuoInfo?> = hub.duo
     val events: Flow<HubEvent> = hub.events
 
     private val _busy = MutableStateFlow(false)
@@ -113,6 +115,12 @@ class TogetherViewModel(
             }
         )
     }
+
+    /** [startedOn] en AAAA-MM-DD. */
+    fun saveOrigin(startedOn: String, song: Song?, story: String) =
+        action("Guardado. Su hilo ya sabe desde cuándo los une 💞") { hub.saveOrigin(startedOn, song, story) }
+
+    fun playSong(song: Song) = viewModelScope.launch { runCatching { hub.playSong(song) } }
 
     fun react(dedication: Dedication, emoji: String) = hub.react(dedication, emoji)
     fun play(dedication: Dedication) = hub.playDedication(dedication)
