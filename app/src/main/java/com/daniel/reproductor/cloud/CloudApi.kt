@@ -257,7 +257,7 @@ class CloudApi(baseClient: OkHttpClient, private val session: Session) {
     suspend fun anniversary(years: Int): AnniversaryGift = parseAnniversary(call("GET", "/duo/anniversary/$years"))
     suspend fun hug(years: Int): AnniversaryGift = parseAnniversary(call("POST", "/duo/anniversary/$years/hug", JSONObject()))
     suspend fun openAnniversary(years: Int): AnniversaryGift = parseAnniversary(call("POST", "/duo/anniversary/$years/open", JSONObject()))
-    suspend fun voteSong(years: Int, videoId: String): Anniversary =
+    suspend fun voteSong(years: Int, videoId: String): AnniversaryGift =
         parseAnniversary(call("POST", "/duo/anniversary/$years/vote", JSONObject().put("videoId", videoId)))
     suspend fun writeLetter(text: String): DuoInfo? = parseDuo(call("PUT", "/duo/letter", JSONObject().put("text", text)))
 
