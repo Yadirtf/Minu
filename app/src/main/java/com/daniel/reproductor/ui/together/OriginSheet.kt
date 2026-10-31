@@ -177,6 +177,11 @@ fun OriginSheet(
                 date?.let { DuoDates.format(it) } ?: "Elegir el día",
                 Icons.Default.CalendarMonth, { pickingDate = true }, Modifier.fillMaxWidth(), primary = date == null,
             )
+            Text(
+                "Aunque lleven años juntos, pongan la fecha real: cuenta para sus mesiversarios y aniversarios. " +
+                    "Las Cintas del mes, en cambio, guardan lo que se dedican en Minu y empiezan desde que llegaron aquí.",
+                style = MaterialTheme.typography.bodySmall, color = c.onSurfaceVariant,
+            )
 
             SheetLabel("La canción de origen (opcional)")
             Text(

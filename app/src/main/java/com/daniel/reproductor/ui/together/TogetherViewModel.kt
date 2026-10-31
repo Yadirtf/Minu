@@ -11,6 +11,7 @@ import com.daniel.reproductor.cloud.CloudSync
 import com.daniel.reproductor.cloud.Capsule
 import com.daniel.reproductor.cloud.CapsuleAnswer
 import com.daniel.reproductor.cloud.Dedication
+import com.daniel.reproductor.cloud.Memories
 import com.daniel.reproductor.cloud.Mixtape
 import com.daniel.reproductor.cloud.DuoInfo
 import com.daniel.reproductor.cloud.HubEvent
@@ -151,8 +152,8 @@ class TogetherViewModel(
         _messages.send(if (result.openedAt != null) "¡La cápsula se abrió! Salvaron el hilo ✨" else "Sellada 💌 Se abre cuando tu pareja responda.")
     }
 
-    private val _memories = MutableStateFlow<List<Capsule>?>(null)
-    val memories: StateFlow<List<Capsule>?> = _memories.asStateFlow()
+    private val _memories = MutableStateFlow<Memories?>(null)
+    val memories: StateFlow<Memories?> = _memories.asStateFlow()
     fun loadMemories() = viewModelScope.launch { runCatching { _memories.value = api.memories() } }
 
     private val _mixtape = MutableStateFlow<Mixtape?>(null)

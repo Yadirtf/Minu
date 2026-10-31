@@ -24,12 +24,20 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.systemBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.GridItemSpan
+import androidx.compose.foundation.lazy.grid.LazyGridItemSpanScope
+import androidx.compose.foundation.lazy.grid.LazyGridScope
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Headphones
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.FilterChip
+import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
@@ -39,6 +47,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -54,6 +63,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.rotate
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -63,6 +73,8 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.daniel.reproductor.cloud.Capsule
 import com.daniel.reproductor.cloud.DuoDates
 import com.daniel.reproductor.cloud.DuoInfo
+import com.daniel.reproductor.cloud.DuoPrefs
+import com.daniel.reproductor.cloud.Memories
 import com.daniel.reproductor.cloud.MissionState
 import com.daniel.reproductor.cloud.MixtapeTrack
 import com.daniel.reproductor.cloud.SealedLetter
@@ -71,8 +83,55 @@ import com.daniel.reproductor.ui.components.PillButton
 import java.time.LocalDate
 
 /**
- * Recuerdos: las Cintas de cada mes, las cápsulas que abrieron al salvar el hilo y las misiones.
- * [startTape] abre directamente la cinta de ese mes (desde el mesiversario).
+ * Una Cinta del mes en Recuerdos. [month] es el mes de la relación (cuenta desde el día en que empezó todo);
+ * [from]..[to) son las fechas que graba, recortadas al día en que llegaron a Minu si la relación es anterior.
+ */
+private data class Tape(
+    val month: Int,
+    val from: LocalDate,
+    val to: LocalDate,
+    val partial: Boolean,
+    val recording: Boolean,
+    val songs: Int?,
+    val capsules: List<Capsule>,
+)
+
+/** Desde qué fechas se graban cintas: la relación cuenta para el número del mes, Minu para lo que se guarda. */
+private class TapeCalendar(val start: LocalDate, joined: LocalDate?, today: LocalDate) {
+    /** El día desde el que hay cintas (nunca antes del inicio de la relación). */
+    val joined: LocalDate = joined?.takeIf { it.isAfter(start) } ?: start
+
+    /** El mes que está grabándose ahora. */
+    val current = DuoDates.monthsBetween(start, today) + 1
+
+    /** La primera cinta: el mes de la relación en el que llegaron a Minu. */
+    val first = (DuoDates.monthsBetween(start, this.joined) + 1).coerceAtMost(current)
+
+    /** Las misiones se revelan cuando el mes termina (en el mesiversario). */
+    fun missionUnlocked(month: Int) = month < current
+
+    fun tape(month: Int, memories: Memories?): Tape {
+        val (rangeFrom, to) = DuoDates.monthRange(start, month)
+        val from = maxOf(rangeFrom, joined)
+        val songs = memories?.dedicationsByDay?.entries
+            ?.filter { (day, _) -> DuoDates.parse(day)?.let { !it.isBefore(from) && it.isBefore(to) } == true }
+            ?.sumOf { it.value }
+        val capsules = memories?.capsules.orEmpty().filter { c ->
+            DuoDates.parse(c.day)?.let { !it.isBefore(from) && it.isBefore(to) } == true
+        }
+        return Tape(month, from, to, partial = from != rangeFrom, recording = month == current, songs = songs, capsules = capsules)
+    }
+
+    /** De la más nueva (la que se está grabando) a la más vieja. */
+    fun tapes(memories: Memories?) = (current downTo first).map { tape(it, memories) }
+}
+
+private fun range(from: LocalDate, toExclusive: LocalDate) = "${DuoDates.short(from)} – ${DuoDates.short(toExclusive.minusDays(1))}"
+
+/**
+ * Recuerdos: las Cintas de cada mes en tarjetas por año, y dentro de cada cinta los retos de ese mes
+ * (la misión y las cápsulas con las que salvaron el hilo). [startTape] abre directamente la cinta de ese mes
+ * (desde el mesiversario).
  */
 @Composable
 fun MemoriesScreen(
@@ -83,7 +142,7 @@ fun MemoriesScreen(
     playing: Boolean,
     onDismiss: () -> Unit,
 ) {
-    val capsules by vm.memories.collectAsStateWithLifecycle()
+    val memories by vm.memories.collectAsStateWithLifecycle()
     var tape by rememberSaveable { mutableStateOf(startTape) }
     var capsule by remember { mutableStateOf<Capsule?>(null) }
     var writing by remember { mutableStateOf(false) }
@@ -93,25 +152,29 @@ fun MemoriesScreen(
     }
     val start = DuoDates.parse(duo?.origin?.startedOn)
     val today = remember { LocalDate.now() }
+    val calendar = start?.let { TapeCalendar(it, DuoDates.parse(duo?.joinedOn), today) }
 
     FullScreen(onDismiss) {
         Column(Modifier.fillMaxSize().systemBarsPadding().padding(horizontal = 16.dp)) {
             val openTape = tape
             val openCapsule = capsule
             when {
-                openTape != null && start != null -> {
-                    BackHandler { tape = null }
-                    MixtapeView(vm, start, openTape, partnerName, playing) { tape = null }
-                }
                 openCapsule != null -> {
                     BackHandler { capsule = null }
                     ScreenHeader("Cápsula", DuoDates.parse(openCapsule.day)?.let { DuoDates.format(it) }, onBack = { capsule = null })
                     CapsuleReveal(openCapsule, partnerName, onPlay = { vm.playSong(it) }, animate = false)
                 }
+                openTape != null && calendar != null -> {
+                    BackHandler { tape = null }
+                    MonthView(
+                        vm, calendar.tape(openTape, memories), memories != null, calendar, duo?.missions?.get(openTape), partnerName, playing,
+                        onMission = vm::markMission, onCapsule = { capsule = it }, onBack = { tape = null },
+                    )
+                }
                 else -> {
                     ScreenHeader("Recuerdos", "Lo que su música ha guardado", onDismiss)
-                    MemoriesList(
-                        start, today, duo, capsules, partnerName, onTape = { tape = it }, onCapsule = { capsule = it }, onMission = vm::markMission,
+                    MemoriesGrid(
+                        calendar, duo, memories, partnerName, onTape = { tape = it }, onCapsule = { capsule = it },
                         onAnniversary = { vm.showAnniversary(it) }, onLetter = { writing = true },
                     )
                 }
@@ -121,67 +184,207 @@ fun MemoriesScreen(
 }
 
 @Composable
-private fun MemoriesList(
-    start: LocalDate?,
-    today: LocalDate,
+private fun MemoriesGrid(
+    calendar: TapeCalendar?,
     duo: DuoInfo?,
-    capsules: List<Capsule>?,
+    memories: Memories?,
     partnerName: String,
     onTape: (Int) -> Unit,
     onCapsule: (Capsule) -> Unit,
-    onMission: (Int, Boolean) -> Unit,
     onAnniversary: (Int) -> Unit,
     onLetter: () -> Unit,
 ) {
-    val months = start?.let { DuoDates.monthsBetween(it, today) } ?: 0
-    LazyColumn(contentPadding = PaddingValues(bottom = 32.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        if (start != null) {
-            item { Section("Aniversarios") }
-            items(duo?.anniversaries.orEmpty().sortedByDescending { it.years }, key = { "a${it.years}" }) { a ->
-                MemoryRow(
-                    "🎁", if (a.years == 1) "Nuestro primer año" else "${a.years} años",
-                    (DuoDates.parse(a.date)?.let { DuoDates.format(it) } ?: a.date) + if (a.opened) "" else " · envuelto, ábranlo juntos",
-                ) { onAnniversary(a.years) }
+    val tapes = calendar?.tapes(memories).orEmpty()
+    val byYear = tapes.groupBy { it.from.year }
+    val years = byYear.keys.sortedDescending()
+    // -1: aún no eligen (se muestra el año más reciente); 0: todos los años
+    var picked by rememberSaveable { mutableIntStateOf(-1) }
+    val year = when {
+        picked == 0 -> null
+        picked in years -> picked
+        else -> years.firstOrNull()
+    }
+    val full: LazyGridItemSpanScope.() -> GridItemSpan = { GridItemSpan(maxLineSpan) }
+
+    LazyVerticalGrid(
+        columns = GridCells.Fixed(2),
+        contentPadding = PaddingValues(bottom = 32.dp),
+        horizontalArrangement = Arrangement.spacedBy(10.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp),
+    ) {
+        if (calendar != null) specialDates(duo, partnerName, onAnniversary, onLetter)
+
+        item(span = full) { Section("Cintas del mes") }
+        if (calendar == null) {
+            item(span = full) { Hint("Guarda en Dúo el día en que empezó todo: cada mes tendrá su cinta con las canciones que se dedicaron.") }
+            // Sin fecha no hay meses: las cápsulas quedan sueltas
+            memories?.capsules?.let { list ->
+                if (list.isNotEmpty()) {
+                    item(span = full) { Section("Cápsulas") }
+                    list.forEach { c -> item(span = full, key = c.day) { CapsuleRow(c, onCapsule) } }
+                }
             }
-            duo?.letter?.let { letter ->
-                item {
-                    val opens = DuoDates.parse(letter.opensOn)?.let { DuoDates.format(it) } ?: letter.opensOn
-                    MemoryRow(
-                        "💌", "Carta para ${DuoDates.yearsPhrase(letter.year)}",
-                        (if (letter.mine != null) "Sellada" else "Escríbela") + " · se abre el $opens" +
-                            if (letter.partnerWrote) " · $partnerName ya selló la suya" else "",
-                        onClick = onLetter,
-                    )
+            return@LazyVerticalGrid
+        }
+
+        if (calendar.first > 1) item(span = full) { JoinedNote(calendar) }
+
+        if (years.size > 1) {
+            item(span = full) {
+                LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    item { YearChip("Todos", year == null) { picked = 0 } }
+                    items(years) { y -> YearChip("$y", year == y) { picked = y } }
                 }
             }
         }
-        item { Section("Cintas del mes") }
-        if (start == null) {
-            item { Hint("Guarda en Dúo el día en que empezó todo: cada mes tendrá su cinta con las canciones que se dedicaron.") }
-        } else {
-            // La del mes en curso (aún grabándose) y las ya terminadas, de la más nueva a la más vieja
-            items((months + 1 downTo 1).toList()) { m ->
-                val (from, to) = DuoDates.monthRange(start, m)
-                TapeRow(m, "${DuoDates.short(from)} – ${DuoDates.short(to.minusDays(1))}", recording = m == months + 1) { onTape(m) }
-            }
-        }
 
-        item { Section("Cápsulas") }
-        when {
-            capsules == null -> item { LinearProgressIndicator(Modifier.fillMaxWidth()) }
-            capsules.isEmpty() -> item { Hint("Cuando salven el hilo con una cápsula de tres canciones, quedará aquí.") }
-            else -> items(capsules, key = { it.day }) { c ->
-                MemoryRow("💌", DuoDates.parse(c.day)?.let { DuoDates.format(it) } ?: c.day, c.prompts.firstOrNull().orEmpty()) { onCapsule(c) }
+        years.filter { year == null || it == year }.forEach { y ->
+            val list = byYear.getValue(y)
+            item(span = full, key = "y$y") {
+                Row(Modifier.padding(top = 6.dp), verticalAlignment = Alignment.Bottom) {
+                    Text("$y", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Black)
+                    Spacer(Modifier.width(10.dp))
+                    Text(
+                        DuoDates.plural(list.size, "cinta", "cintas"),
+                        style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(bottom = 4.dp),
+                    )
+                }
             }
-        }
-
-        if (start != null && months >= 1) {
-            item { Section("Misiones") }
-            items((months downTo 1).toList()) { m ->
-                MissionRow(m, duo?.missions?.get(m), partnerName, onMission)
+            list.forEach { t ->
+                item(key = "t${t.month}") { TapeCard(t, duo?.missions?.get(t.month), calendar.missionUnlocked(t.month)) { onTape(t.month) } }
             }
         }
     }
+}
+
+/** Aniversarios y la carta sellada, en una fila que se desliza de lado para no alargar la pantalla. */
+private fun LazyGridScope.specialDates(duo: DuoInfo?, partnerName: String, onAnniversary: (Int) -> Unit, onLetter: () -> Unit) {
+    val anniversaries = duo?.anniversaries.orEmpty().sortedByDescending { it.years }
+    val letter = duo?.letter
+    if (anniversaries.isEmpty() && letter == null) return
+    item(span = { GridItemSpan(maxLineSpan) }) {
+        Column {
+            Section("Fechas especiales")
+            Spacer(Modifier.height(8.dp))
+            LazyRow(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                letter?.let { l ->
+                    item {
+                        val opens = DuoDates.parse(l.opensOn)?.let { DuoDates.short(it) } ?: l.opensOn
+                        SmallCard(
+                            "💌", "Carta para ${DuoDates.yearsPhrase(l.year)}",
+                            (if (l.mine != null) "Sellada" else "Escríbela") + " · se abre el $opens" +
+                                if (l.partnerWrote) " · $partnerName ya selló la suya" else "",
+                            onClick = onLetter,
+                        )
+                    }
+                }
+                items(anniversaries, key = { "a${it.years}" }) { a ->
+                    SmallCard(
+                        "🎁", if (a.years == 1) "Nuestro primer año" else "${a.years} años",
+                        (DuoDates.parse(a.date)?.let { DuoDates.format(it) } ?: a.date) + if (a.opened) "" else " · envuelto, ábranlo juntos",
+                    ) { onAnniversary(a.years) }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun SmallCard(emoji: String, title: String, subtitle: String, onClick: () -> Unit) {
+    Column(
+        Modifier.width(190.dp).clip(RoundedCornerShape(14.dp)).background(MaterialTheme.colorScheme.surfaceContainer)
+            .clickable(onClick = onClick).padding(12.dp),
+    ) {
+        Text(emoji, fontSize = 22.sp)
+        Text(title, style = MaterialTheme.typography.titleSmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        Text(subtitle, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 2, overflow = TextOverflow.Ellipsis)
+    }
+}
+
+@Composable
+private fun YearChip(label: String, selected: Boolean, onClick: () -> Unit) {
+    FilterChip(
+        selected = selected,
+        onClick = onClick,
+        label = { Text(label) },
+        colors = FilterChipDefaults.filterChipColors(
+            selectedContainerColor = THREAD_RED,
+            selectedLabelColor = Color.White,
+        ),
+    )
+}
+
+/**
+ * Por qué la primera cinta no es la del mes 1: la fecha de la relación cuenta para los mesiversarios,
+ * aniversarios y el número de cada cinta, pero las canciones solo existen desde que llegaron a Minu.
+ * Se explica una vez completa; luego queda una línea para volver a leerla.
+ */
+@Composable
+private fun JoinedNote(calendar: TapeCalendar) {
+    val context = LocalContext.current
+    var open by remember { mutableStateOf(DuoPrefs.seen(context, "tapes_note") == null) }
+    if (!open) {
+        Text(
+            "ⓘ ¿Por qué la primera cinta es la del mes ${calendar.first}?",
+            style = MaterialTheme.typography.bodySmall, color = THREAD_RED,
+            modifier = Modifier.clip(RoundedCornerShape(8.dp)).clickable { open = true }.padding(vertical = 4.dp),
+        )
+        return
+    }
+    Column(
+        Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(THREAD_RED.copy(alpha = 0.12f)).padding(14.dp),
+    ) {
+        Text("💞 Juntos desde el ${DuoDates.format(calendar.start)}", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
+        Spacer(Modifier.height(6.dp))
+        Text(
+            "Esa fecha es la de su historia: con ella cuentan sus mesiversarios, aniversarios y el número de cada cinta.",
+            style = MaterialTheme.typography.bodyMedium,
+        )
+        Spacer(Modifier.height(6.dp))
+        Text(
+            "Las cintas guardan las canciones que se dedican en Minu, así que empezaron a grabarse el " +
+                "${DuoDates.format(calendar.joined)}, cuando llegaron aquí. Por eso la primera es la del mes ${calendar.first} " +
+                "y no verán meses vacíos de antes.",
+            style = MaterialTheme.typography.bodyMedium,
+        )
+        TextButton(
+            onClick = { DuoPrefs.setSeen(context, "tapes_note", "1"); open = false },
+            modifier = Modifier.align(Alignment.End),
+        ) { Text("Entendido") }
+    }
+}
+
+/** La tarjeta de una cinta: el casete, sus fechas y lo que guarda ese mes. */
+@Composable
+private fun TapeCard(t: Tape, mission: MissionState?, missionUnlocked: Boolean, onClick: () -> Unit) {
+    Column(
+        Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(MaterialTheme.colorScheme.surfaceContainer)
+            .clickable(onClick = onClick).padding(10.dp),
+    ) {
+        Cassette(Modifier.fillMaxWidth(), t.month, spin = 0f)
+        Spacer(Modifier.height(8.dp))
+        Text(range(t.from, t.to), style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold, maxLines = 1)
+        val details = listOfNotNull(
+            t.songs?.let { if (it == 0 && !t.recording) "En blanco" else "🎵 $it" },
+            t.capsules.size.takeIf { it > 0 }?.let { "💌 $it" },
+            if (missionUnlocked) if (mission?.done == true) "✅ misión" else "🎯 misión" else null,
+        )
+        Text(
+            details.joinToString("  "),
+            style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis,
+        )
+        if (t.recording) {
+            Text("● Grabándose", style = MaterialTheme.typography.labelSmall, color = THREAD_RED, fontWeight = FontWeight.Bold)
+        }
+    }
+}
+
+@Composable
+private fun CapsuleRow(c: Capsule, onCapsule: (Capsule) -> Unit) {
+    MemoryRow(
+        "💌", "Cápsula del " + (DuoDates.parse(c.day)?.let { DuoDates.format(it) } ?: c.day), c.prompts.firstOrNull().orEmpty(),
+    ) { onCapsule(c) }
 }
 
 /** La carta para el próximo aniversario: se puede reescribir mientras siga sellada. */
@@ -228,25 +431,6 @@ private fun MemoryRow(emoji: String, title: String, subtitle: String, onClick: (
         Column(Modifier.weight(1f)) {
             Text(title, style = MaterialTheme.typography.titleSmall)
             Text(subtitle, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
-        }
-    }
-}
-
-@Composable
-private fun TapeRow(month: Int, range: String, recording: Boolean, onClick: () -> Unit) {
-    Row(
-        Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(MaterialTheme.colorScheme.surfaceContainer)
-            .clickable(onClick = onClick).padding(12.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Cassette(Modifier.width(72.dp), month, spin = 0f)
-        Spacer(Modifier.width(14.dp))
-        Column(Modifier.weight(1f)) {
-            Text("Mes $month", style = MaterialTheme.typography.titleSmall)
-            Text(
-                if (recording) "$range · grabándose" else range,
-                style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
         }
     }
 }
@@ -309,43 +493,83 @@ private fun DrawScope.drawCassette(spin: Float) {
     drawRoundRect(Color(0xFF1A1424), topLeft = Offset(w * 0.22f, h * 0.78f), size = Size(w * 0.56f, h * 0.14f), cornerRadius = CornerRadius(h * 0.04f))
 }
 
-/** La Cinta del mes: el casete, lado A (tus dedicatorias) y lado B (las suyas). */
+
+/**
+ * Un mes de recuerdos: la Cinta del mes (lado A tus dedicatorias, lado B las suyas) y los retos de ese mes,
+ * la misión y las cápsulas con las que salvaron el hilo.
+ */
 @Composable
-private fun MixtapeView(vm: TogetherViewModel, start: LocalDate, month: Int, partnerName: String, playing: Boolean, onBack: () -> Unit) {
-    val (from, to) = remember(start, month) { DuoDates.monthRange(start, month) }
+private fun MonthView(
+    vm: TogetherViewModel,
+    t: Tape,
+    loaded: Boolean,
+    calendar: TapeCalendar,
+    mission: MissionState?,
+    partnerName: String,
+    playing: Boolean,
+    onMission: (Int, Boolean) -> Unit,
+    onCapsule: (Capsule) -> Unit,
+    onBack: () -> Unit,
+) {
     val tape by vm.mixtape.collectAsStateWithLifecycle()
-    LaunchedEffect(from, to) { vm.loadMixtape(from.toString(), to.toString()) }
+    LaunchedEffect(t.from, t.to) { vm.loadMixtape(t.from.toString(), t.to.toString()) }
     val spin by rememberInfiniteTransition(label = "carretes").animateFloat(0f, 360f, infiniteRepeatable(tween(2400, easing = LinearEasing)), label = "giro")
 
-    ScreenHeader("Cinta del mes $month", "${DuoDates.short(from)} – ${DuoDates.short(to.minusDays(1))}", onBack)
-    val t = tape?.takeIf { it.from == from.toString() }
+    ScreenHeader("Cinta del mes ${t.month}", range(t.from, t.to) + " ${t.from.year}" + if (t.recording) " · grabándose" else "", onBack)
+    val mix = tape?.takeIf { it.from == t.from.toString() }
     LazyColumn(contentPadding = PaddingValues(bottom = 32.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         item {
-            Cassette(Modifier.fillMaxWidth().padding(horizontal = 32.dp, vertical = 8.dp), month, spin = if (playing) spin else 0f)
+            Cassette(Modifier.fillMaxWidth().padding(horizontal = 32.dp, vertical = 8.dp), t.month, spin = if (playing) spin else 0f)
         }
-        if (t == null) {
-            item { LinearProgressIndicator(Modifier.fillMaxWidth()) }
-            return@LazyColumn
+        if (t.partial) {
+            item { Hint("Esta cinta empezó a grabarse el ${DuoDates.format(t.from)}, cuando llegaron a Minu.") }
         }
-        val all = t.inOrder.map { it.song }
-        if (all.isEmpty()) {
-            item { Hint("Esta cinta está en blanco: no hubo dedicatorias en estas fechas.") }
-            return@LazyColumn
-        }
-        item {
-            Column {
-                Text(
-                    "${all.size} canciones · la banda sonora de su mes $month",
-                    style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-                Spacer(Modifier.height(10.dp))
-                PillButton("Escuchar la cinta", Icons.Default.PlayArrow, { vm.playAll(all) }, Modifier.fillMaxWidth())
-                Spacer(Modifier.height(8.dp))
-                PillButton("Escucharla juntos", Icons.Default.Headphones, { vm.playAll(all); vm.inviteListen() }, Modifier.fillMaxWidth(), primary = false)
+        val all = mix?.inOrder?.map { it.song }.orEmpty()
+        when {
+            mix == null -> item { LinearProgressIndicator(Modifier.fillMaxWidth()) }
+            all.isEmpty() -> item {
+                Hint(if (t.recording) "Esta cinta se está grabando: cada canción que se dediquen este mes quedará aquí." else "Esta cinta está en blanco: no hubo dedicatorias en estas fechas.")
+            }
+            else -> item {
+                Column {
+                    Text(
+                        "${all.size} canciones · la banda sonora de su mes ${t.month}",
+                        style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    Spacer(Modifier.height(10.dp))
+                    PillButton("Escuchar la cinta", Icons.Default.PlayArrow, { vm.playAll(all) }, Modifier.fillMaxWidth())
+                    Spacer(Modifier.height(8.dp))
+                    PillButton("Escucharla juntos", Icons.Default.Headphones, { vm.playAll(all); vm.inviteListen() }, Modifier.fillMaxWidth(), primary = false)
+                }
             }
         }
-        side("Lado A · tus dedicatorias", t.sideA, vm)
-        side("Lado B · las de $partnerName", t.sideB, vm)
+
+        // Los retos del mes, junto a su cinta
+        item {
+            Column {
+                Text("Retos del mes", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, modifier = Modifier.padding(top = 16.dp))
+                HorizontalDivider(Modifier.padding(top = 6.dp))
+            }
+        }
+        item {
+            if (calendar.missionUnlocked(t.month)) {
+                MissionRow(t.month, mission, partnerName, onMission)
+            } else {
+                MemoryRow("🎯", "Misión del mes ${t.month}", "Se revela el ${DuoDates.format(t.to)}, en su mesiversario") {}
+            }
+        }
+        when {
+            !loaded -> item { LinearProgressIndicator(Modifier.fillMaxWidth()) }
+            t.capsules.isEmpty() -> item {
+                Hint(if (t.recording) "Si el hilo se deshilacha y lo salvan con una cápsula, quedará aquí." else "Este mes no tuvieron que salvar el hilo 💪")
+            }
+            else -> items(t.capsules, key = { it.day }) { c -> CapsuleRow(c, onCapsule) }
+        }
+
+        if (mix != null && all.isNotEmpty()) {
+            side("Lado A · tus dedicatorias", mix.sideA, vm)
+            side("Lado B · las de $partnerName", mix.sideB, vm)
+        }
     }
 }
 

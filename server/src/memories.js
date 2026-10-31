@@ -120,6 +120,35 @@ export async function openedCapsules(db, me) {
 }
 
 /**
+ * Desde cuándo usan Minu como pareja (AAAA-MM-DD local): lo más antiguo entre el registro de la pareja
+ * y su primera dedicatoria. Las Cintas del mes empiezan aquí, no en la fecha de inicio de la relación.
+ */
+export async function joinedOn(db, couple, me) {
+  const first = await dedications(db)
+    .find({ $or: [{ from: me._id, to: me.partnerId }, { from: me.partnerId, to: me._id }] }, { projection: { createdAt: 1 } })
+    .sort({ createdAt: 1 })
+    .limit(1)
+    .next();
+  const times = [couple?.createdAt, first?.createdAt].filter(Boolean).map((d) => d.getTime());
+  if (!times.length) return null;
+  return localDay(couple?.tz, new Date(Math.min(...times)));
+}
+
+/** Cuántas dedicatorias hubo entre los dos cada día local: { 'AAAA-MM-DD': n }. Para numerar las cintas. */
+export async function dedicationDays(db, me) {
+  const couple = await couples(db).findOne({ _id: coupleKey(me._id, me.partnerId) });
+  const list = await dedications(db)
+    .find({ $or: [{ from: me._id, to: me.partnerId }, { from: me.partnerId, to: me._id }] }, { projection: { createdAt: 1 } })
+    .toArray();
+  const days = {};
+  for (const d of list) {
+    const day = localDay(couple?.tz, d.createdAt);
+    days[day] = (days[day] ?? 0) + 1;
+  }
+  return days;
+}
+
+/**
  * La Cinta del mes: las dedicatorias entre los dos con día local en [from, to). Lado A las tuyas,
  * lado B las de tu pareja, en orden.
  */

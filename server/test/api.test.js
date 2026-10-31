@@ -376,6 +376,9 @@ test('cápsula: salva la racha cuando los dos sellan sus tres canciones; cinta d
     assert.deepEqual(tape.sideB.map((t) => t.song.title), ['De Mateo']);
     assert.equal(tape.sideA[0].message, 'para ti');
     assert.equal((await api('GET', '/duo/mixtape?from=2026-06-01&to=2026-05-01', null, a)).status, 400);
+    // Las cintas empiezan cuando llegaron a Minu, con su primera dedicatoria
+    assert.equal((await api('GET', '/duo', null, b)).body.joinedOn, '2026-05-01');
+    assert.deepEqual((await api('GET', '/duo/memories', null, a)).body.days, { '2026-05-01': 2, '2026-05-02': 1 });
 
     at('2026-05-03'); // Mateo no dedicó el 2: toca reto
     assert.equal((await api('GET', '/duo/capsule', null, a)).body.capsule, null);
