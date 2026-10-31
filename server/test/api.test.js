@@ -474,7 +474,7 @@ test('aniversario: se abre con el abrazo de los dos, cuenta su año, abre las ca
     assert.equal(voted.song.title, 'La nuestra');
 
     const duo = (await api('GET', '/duo', null, a)).body;
-    assert.deepEqual(duo.anniversaries, [{ years: 1, date: '2025-06-10', opened: true }]);
+    assert.deepEqual(duo.anniversaries, [{ years: 1, date: '2025-06-10', opened: true, beforeMinu: false }]);
     assert.equal(duo.letter.year, 2);
     assert.equal(duo.letter.mine, null);
   } finally {
@@ -483,9 +483,9 @@ test('aniversario: se abre con el abrazo de los dos, cuenta su año, abre las ca
 });
 
 test('aniversario: los que vivieron antes de llegar a Minu se marcan y no se abren', async () => {
-  const a = (await register('julieta')).body.token;
-  const b = (await register('romeo2')).body.token;
-  await api('POST', '/partner/request', { username: 'romeo2' }, a);
+  const a = (await register('isolda')).body.token;
+  const b = (await register('tristan')).body.token;
+  await api('POST', '/partner/request', { username: 'tristan' }, a);
   await api('POST', '/partner/accept', null, b);
   const song = { videoId: 'aaaaaaaaaaa', title: 'La nuestra', uploader: 'X', durationSec: 200, thumbnailUrl: '' };
   try {

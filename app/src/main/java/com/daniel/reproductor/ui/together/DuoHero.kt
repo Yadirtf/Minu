@@ -208,7 +208,7 @@ fun DuoHero(
                     rotationY = (pull.x / box.width).coerceIn(-1f, 1f) * 8f
                     rotationX = -(pull.y / box.height).coerceIn(-1f, 1f) * 6f
                 }
-                cameraDistance = 16f * density
+                cameraDistance = 16f * this.density
             }
             .clip(style.cardShape)
             .background(Brush.verticalGradient(listOf(THREAD_RED.copy(alpha = 0.16f), c.primary.copy(alpha = 0.10f), c.surfaceContainer)))
