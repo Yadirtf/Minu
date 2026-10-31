@@ -43,6 +43,12 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.withFrameMillis
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.graphics.drawscope.translate
+import androidx.compose.ui.graphics.Shadow
+import androidx.compose.ui.graphics.lerp
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
@@ -85,6 +91,9 @@ internal val WARM = Color(0xFFFF9A62)
 private val STREAK_GOLD = Color(0xFFFFC857)
 
 private class Flight(val id: Long, val emoji: String, val fromMe: Boolean)
+
+/** Una luz desenfocada del fondo. [depth] 0..1: más cerca, más grande y más paralaje. */
+private class Bokeh(val x: Float, val y: Float, val depth: Float, val tint: Int)
 private class Burst(val id: Long, val at: Offset)
 
 /**
@@ -145,12 +154,18 @@ fun DuoHero(
     val inf = rememberInfiniteTransition(label = "duo")
     val phase by inf.animateFloat(0f, (2 * PI).toFloat(), infiniteRepeatable(tween(1300, easing = LinearEasing)), label = "fase")
     val breathe by inf.animateFloat(0f, 1f, infiniteRepeatable(tween(1800), RepeatMode.Reverse), label = "respira")
+    val float by inf.animateFloat(0f, (2 * PI).toFloat(), infiniteRepeatable(tween(4200, easing = LinearEasing)), label = "flotar")
+    val drift by inf.animateFloat(0f, 1f, infiniteRepeatable(tween(16000, easing = LinearEasing)), label = "deriva")
     val stars = remember { List(18) { Triple(Random.nextFloat(), Random.nextFloat(), Random.nextFloat() * 2f * PI.toFloat()) } }
+    // Luces desenfocadas a distintas profundidades: las grandes están "cerca" y se mueven más
+    val bokeh = remember { List(9) { Bokeh(Random.nextFloat(), Random.nextFloat(), 0.25f + Random.nextFloat() * 0.75f, it % 3) } }
+    val bobPx = with(density) { 4.dp.toPx() }
 
     fun myHome() = Offset(box.width * 0.2f, box.height * 0.42f)
     fun partnerHome() = Offset(box.width * 0.8f, box.height * 0.42f)
-    fun myPos() = myHome() + pull
-    fun partnerPos() = partnerHome() + (myHome() - partnerHome()) * partnerPull.value
+    // Las burbujas flotan un poco, cada una a su ritmo
+    fun myPos() = myHome() + pull + Offset(0f, bobPx * sin(float))
+    fun partnerPos() = partnerHome() + (myHome() - partnerHome()) * partnerPull.value + Offset(0f, bobPx * sin(float + 2.2f))
     fun sag(a: Offset, b: Offset): Float {
         val rest = (partnerHome() - myHome()).getDistance().coerceAtLeast(1f)
         val len = (b - a).getDistance().coerceAtLeast(1f)
@@ -187,6 +202,14 @@ fun DuoHero(
         modifier
             .fillMaxWidth()
             .height(250.dp)
+            // Al arrastrar tu burbuja la tarjeta se inclina hacia donde la llevas, como una ventana con fondo
+            .graphicsLayer {
+                if (box.width > 0) {
+                    rotationY = (pull.x / box.width).coerceIn(-1f, 1f) * 8f
+                    rotationX = -(pull.y / box.height).coerceIn(-1f, 1f) * 6f
+                }
+                cameraDistance = 16f * density
+            }
             .clip(style.cardShape)
             .background(Brush.verticalGradient(listOf(THREAD_RED.copy(alpha = 0.16f), c.primary.copy(alpha = 0.10f), c.surfaceContainer)))
             .onSizeChanged { box = it }
@@ -271,9 +294,35 @@ fun DuoHero(
         // Fondo: estrellitas que titilan, el hilo y el corazón
         Canvas(Modifier.fillMaxSize()) {
             if (box == IntSize.Zero) return@Canvas
+            // Profundidad: lo lejano se mueve poco al inclinar, lo cercano mucho
+            drawRect(Brush.radialGradient(listOf(Color.White.copy(alpha = 0.10f), Color.Transparent), center = Offset(size.width / 2f, size.height * 0.35f), radius = size.width * 0.6f))
             stars.forEach { (x, y, o) ->
                 val twinkle = (sin(phase + o) + 1f) / 2f
-                drawCircle(Color.White, radius = 1.2.dp.toPx() + twinkle * 1.dp.toPx(), center = Offset(size.width * x, size.height * y), alpha = 0.10f + 0.25f * twinkle)
+                val at = Offset(size.width * x, size.height * y) - pull * 0.04f
+                drawCircle(Color.White, radius = 1.2.dp.toPx() + twinkle * 1.dp.toPx(), center = at, alpha = 0.10f + 0.25f * twinkle)
+            }
+            bokeh.forEach { l ->
+                val y = ((l.y - drift * (0.3f + l.depth * 0.5f)) % 1f + 1f) % 1f
+                val r = (6 + 18 * l.depth).dp.toPx()
+                val at = Offset(size.width * l.x, size.height * (1.1f * y - 0.05f)) - pull * (0.06f + 0.12f * l.depth)
+                val tint = when (l.tint) { 0 -> THREAD_RED; 1 -> WARM; else -> Color.White }
+                val glow = if (playing) 1.6f else 1f
+                drawCircle(
+                    Brush.radialGradient(listOf(tint.copy(alpha = (0.10f + 0.10f * (1f - l.depth)) * glow), Color.Transparent), center = at, radius = r),
+                    radius = r, center = at,
+                )
+            }
+            // Sombras de las burbujas en el "piso": se encogen cuando la burbuja sube
+            val floorY = box.height * 0.42f + orbR + 16.dp.toPx()
+            listOf(myPos(), partnerPos()).forEachIndexed { i, p ->
+                if (i == 1 && !linked) return@forEachIndexed
+                val lift = ((floorY - orbR - 16.dp.toPx()) - p.y) / (orbR * 2f) // >0 si sube
+                val w = orbR * 1.5f * (1f - 0.25f * lift.coerceIn(-1f, 1f))
+                val center = Offset(p.x, floorY)
+                drawOval(
+                    Brush.radialGradient(listOf(Color.Black.copy(alpha = 0.28f), Color.Transparent), center = center, radius = w),
+                    topLeft = center - Offset(w, w * 0.28f), size = Size(w * 2f, w * 0.56f),
+                )
             }
             val a = myPos(); val b = partnerPos()
             val s = sag(a, b)
@@ -292,8 +341,7 @@ fun DuoHero(
                     else -> THREAD_RED
                 }
                 val glow = 0.30f + 0.25f * (days.coerceAtMost(30) / 30f)
-                drawPath(path, THREAD_GLOW.copy(alpha = glow), style = Stroke((10 + 4 * (days.coerceAtMost(30) / 30f)).dp.toPx(), cap = StrokeCap.Round))
-                drawPath(path, color, style = Stroke(3.dp.toPx(), cap = StrokeCap.Round))
+                drawCord(path, color, glow, (10 + 4 * (days.coerceAtMost(30) / 30f)).dp.toPx(), phase)
                 if (days in 100 until 365) {
                     drawPath(path, STREAK_GOLD, style = Stroke(1.dp.toPx(), cap = StrokeCap.Round, pathEffect = PathEffect.dashPathEffect(floatArrayOf(14f, 10f), phase * 6f)))
                 }
@@ -415,10 +463,29 @@ private fun Orb(name: String, brush: Brush, fade: Float, scale: Float, center: (
             .graphicsLayer { scaleX = scale; scaleY = scale; alpha = fade }
             .clip(CircleShape)
             .background(brush)
-            .border(2.dp, Color.White.copy(alpha = 0.85f), CircleShape),
+            // Una esfera: sombra hacia abajo a la derecha y un brillo arriba a la izquierda
+            .drawBehind {
+                drawCircle(
+                    Brush.radialGradient(
+                        listOf(Color.Transparent, Color.Black.copy(alpha = 0.42f)),
+                        center = Offset(size.width * 0.38f, size.height * 0.34f), radius = size.width * 0.78f,
+                    ),
+                )
+                drawCircle(
+                    Brush.radialGradient(
+                        listOf(Color.White.copy(alpha = 0.75f), Color.White.copy(alpha = 0f)),
+                        center = Offset(size.width * 0.34f, size.height * 0.26f), radius = size.width * 0.26f,
+                    ),
+                    radius = size.width * 0.26f, center = Offset(size.width * 0.34f, size.height * 0.26f),
+                )
+            }
+            .border(2.dp, Brush.linearGradient(listOf(Color.White.copy(alpha = 0.95f), Color.White.copy(alpha = 0.25f))), CircleShape),
         contentAlignment = Alignment.Center,
     ) {
-        Text(name.trim().take(1).uppercase().ifEmpty { "♥" }, color = Color.White, fontSize = 30.sp, fontWeight = FontWeight.Bold)
+        Text(
+            name.trim().take(1).uppercase().ifEmpty { "♥" }, color = Color.White, fontSize = 30.sp, fontWeight = FontWeight.Bold,
+            style = TextStyle(shadow = Shadow(Color.Black.copy(alpha = 0.4f), Offset(0f, 3f), 6f)),
+        )
     }
 }
 
@@ -452,7 +519,10 @@ internal fun threadPoint(a: Offset, b: Offset, t: Float, sag: Float, wave: Float
     return a + dir * t + Offset(0f, sag * 4f * t * (1f - t)) + normal * ripple
 }
 
+/** Un corazón con volumen: luz arriba a la izquierda, rojo profundo abajo, un brillo y su sombra. */
 internal fun DrawScope.drawHeart(center: Offset, size: Float, color: Color, alpha: Float = 1f) {
+    val a = alpha.coerceIn(0f, 1f)
+    if (a <= 0f) return
     val s = size / 2f
     val x = center.x
     val y = center.y
@@ -462,5 +532,40 @@ internal fun DrawScope.drawHeart(center: Offset, size: Float, color: Color, alph
         cubicTo(x + s * 0.75f, y - s * 1.35f, x + s * 1.7f, y - s * 0.05f, x, y + s * 0.9f)
         close()
     }
-    drawPath(path, color, alpha = alpha.coerceIn(0f, 1f))
+    translate(top = s * 0.22f) { drawPath(path, Color.Black, alpha = 0.2f * a) }
+    drawPath(
+        path,
+        Brush.radialGradient(
+            listOf(lerp(color, Color.White, 0.55f), color, lerp(color, Color.Black, 0.5f)),
+            center = Offset(x - s * 0.45f, y - s * 0.6f), radius = s * 2.1f,
+        ),
+        alpha = a,
+    )
+    drawOval(Color.White, topLeft = Offset(x - s * 0.88f, y - s * 0.82f), size = Size(s * 0.48f, s * 0.28f), alpha = 0.6f * a)
+}
+
+/**
+ * El hilo como un cordón de verdad: sombra en el fondo, borde oscuro, hebras torcidas que corren
+ * y un brillo arriba. [phase] mueve las hebras (0..2π da una vuelta sin saltos).
+ */
+private fun DrawScope.drawCord(path: Path, color: Color, glowAlpha: Float, glowWidth: Float, phase: Float) {
+    val round = StrokeCap.Round
+    translate(top = 9.dp.toPx()) {
+        drawPath(path, Color.Black.copy(alpha = 0.07f), style = Stroke(12.dp.toPx(), cap = round))
+        drawPath(path, Color.Black.copy(alpha = 0.12f), style = Stroke(4.dp.toPx(), cap = round))
+    }
+    drawPath(path, THREAD_GLOW.copy(alpha = glowAlpha), style = Stroke(glowWidth, cap = round))
+    drawPath(path, lerp(color, Color.Black, 0.5f), style = Stroke(5.5.dp.toPx(), cap = round))
+    drawPath(path, color, style = Stroke(4.dp.toPx(), cap = round))
+    val period = 8.dp.toPx()
+    drawPath(
+        path, lerp(color, Color.Black, 0.28f),
+        style = Stroke(
+            4.dp.toPx(), cap = StrokeCap.Butt,
+            pathEffect = PathEffect.dashPathEffect(floatArrayOf(period * 0.35f, period * 0.65f), -(phase / (2f * PI.toFloat())) * period * 2f),
+        ),
+    )
+    translate(top = -1.dp.toPx()) {
+        drawPath(path, Color.White.copy(alpha = 0.55f), style = Stroke(1.2.dp.toPx(), cap = round))
+    }
 }

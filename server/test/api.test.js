@@ -481,3 +481,27 @@ test('aniversario: se abre con el abrazo de los dos, cuenta su año, abre las ca
     fakeNow = null;
   }
 });
+
+test('aniversario: los que vivieron antes de llegar a Minu se marcan y no se abren', async () => {
+  const a = (await register('julieta')).body.token;
+  const b = (await register('romeo2')).body.token;
+  await api('POST', '/partner/request', { username: 'romeo2' }, a);
+  await api('POST', '/partner/accept', null, b);
+  const song = { videoId: 'aaaaaaaaaaa', title: 'La nuestra', uploader: 'X', durationSec: 200, thumbnailUrl: '' };
+  try {
+    fakeNow = new Date('2026-10-20T15:00:00Z');
+    await api('POST', '/dedications', { song }, a);
+    await api('PUT', '/duo/origin', { startedOn: '2019-12-12' }, a);
+    fakeNow = new Date('2026-12-13T15:00:00Z');
+    const duo = (await api('GET', '/duo', null, b)).body;
+    assert.equal(duo.joinedOn, '2026-10-20');
+    assert.equal(duo.anniversaries.length, 7);
+    assert.ok(duo.anniversaries.slice(0, 6).every((x) => x.beforeMinu));
+    assert.equal(duo.anniversaries[6].beforeMinu, false); // 12 dic 2026: el primero en Minu
+    assert.equal((await api('GET', '/duo/anniversary/3', null, a)).status, 409);
+    assert.equal((await api('POST', '/duo/anniversary/3/hug', null, a)).status, 409);
+    assert.equal((await api('GET', '/duo/anniversary/7', null, a)).status, 200);
+  } finally {
+    fakeNow = null;
+  }
+});

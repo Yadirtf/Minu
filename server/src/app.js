@@ -499,6 +499,7 @@ async function duoState(db, me, now = new Date()) {
   const streak = await streakView(db, me, now);
   const couple = await couples(db).findOne({ _id: coupleKey(me._id, me.partnerId) });
   const o = couple?.origin;
+  const joined = await joinedOn(db, couple, me);
   const between = { $or: [{ from: me._id, to: me.partnerId }, { from: me.partnerId, to: me._id }] };
   return {
     linked: true,
@@ -512,11 +513,11 @@ async function duoState(db, me, now = new Date()) {
           setAt: o.setAt.getTime(),
         }
       : null,
-    // Desde cuándo usan Minu juntos: de aquí en adelante hay Cintas del mes
-    joinedOn: await joinedOn(db, couple, me),
+    // Desde cuándo usan Minu juntos: de aquí en adelante hay Cintas del mes y regalos de aniversario
+    joinedOn: joined,
     stats: { dedications: await dedications(db).countDocuments(between), listenSec: streak.listenSec },
     missions: missionsView(couple, me._id, me.partnerId),
-    anniversaries: anniversariesView(couple, streak.today),
+    anniversaries: anniversariesView(couple, streak.today, joined),
     letter: await sealedLetters(db, me, now),
     streak,
   };
