@@ -7,6 +7,7 @@ import androidx.lifecycle.ProcessLifecycleOwner
 import androidx.work.WorkManager
 import com.daniel.reproductor.cloud.CloudApi
 import com.daniel.reproductor.cloud.CloudSync
+import com.daniel.reproductor.cloud.DuoReminderWorker
 import com.daniel.reproductor.cloud.PartnerHub
 import com.daniel.reproductor.cloud.Push
 import com.daniel.reproductor.cloud.Session
@@ -66,6 +67,7 @@ class ReproductorApp : Application() {
         NewPipe.init(OkHttpDownloader(okHttpClient))
         cloudSync.watch(database)
         Push.createChannels(this)
+        DuoReminderWorker.schedule(this) // mesiversarios y aniversarios, aunque la app esté cerrada
         appScope.launch { Push.register(this@ReproductorApp) } // por si cambió el token de notificaciones
 
         ProcessLifecycleOwner.get().lifecycle.addObserver(object : DefaultLifecycleObserver {

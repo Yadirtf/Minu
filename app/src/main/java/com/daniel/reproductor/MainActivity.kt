@@ -86,16 +86,20 @@ import com.daniel.reproductor.ui.theme.LocalAppStyle
 import com.daniel.reproductor.ui.theme.ReproductorTheme
 import com.daniel.reproductor.ui.theme.StyleId
 import com.daniel.reproductor.ui.theme.rememberArtworkColor
+import com.daniel.reproductor.cloud.DuoDates
+import com.daniel.reproductor.cloud.DuoPrefs
 import com.daniel.reproductor.cloud.HubEvent
 import com.daniel.reproductor.cloud.ListenMode
 import com.daniel.reproductor.ui.together.AccountScreen
 import com.daniel.reproductor.ui.together.FloatingReactions
 import com.daniel.reproductor.ui.together.IncomingDedicationOverlay
+import com.daniel.reproductor.ui.together.MilestoneOverlay
 import com.daniel.reproductor.ui.together.ListenBanner
 import com.daniel.reproductor.ui.together.TogetherScreen
 import com.daniel.reproductor.ui.together.TogetherViewModel
 import androidx.compose.ui.platform.LocalContext
 import kotlinx.coroutines.launch
+import java.time.LocalDate
 
 class MainActivity : ComponentActivity() {
     override fun onNewIntent(intent: Intent) {
@@ -188,6 +192,12 @@ internal fun AppRoot(
     // Dedicatorias recibidas que todavía no se han visto
     var liveDedicationId by remember { mutableStateOf<String?>(null) }
     val pending = dedications.firstOrNull { it.incoming && it.seenAt == null }
+    // Mesiversario, aniversario o días redondos: se celebra una vez al abrir la app ese día
+    val duo by together.duo.collectAsStateWithLifecycle()
+    val today = remember { LocalDate.now() }
+    var celebrated by remember { mutableStateOf(DuoPrefs.celebrated(app)) }
+    val milestone = DuoDates.parse(duo?.origin?.startedOn)?.let { DuoDates.milestoneOn(it, today) }
+        ?.takeIf { celebrated != "$today:${it.key}" }
     val styleId by lib.style.collectAsStateWithLifecycle()
     val savedIds by lib.savedIds.collectAsStateWithLifecycle()
     val saveSheet = rememberSaveToPlaylistState()
@@ -332,6 +342,22 @@ internal fun AppRoot(
         AnimatedVisibility(visible = showAccount, enter = fadeIn(), exit = fadeOut()) {
             BackHandler { showAccount = false }
             AccountScreen(together, onBack = { showAccount = false })
+        }
+
+        if (milestone != null && pending == null && partner?.linked == true) {
+            MilestoneOverlay(
+                milestone = milestone,
+                me = account?.displayName.orEmpty().ifBlank { "Tú" },
+                partner = partnerName,
+                story = duo?.origin?.story.orEmpty(),
+                song = duo?.origin?.song,
+                onPlay = { together.playSong(it) },
+                onDismiss = {
+                    val mark = "$today:${milestone.key}"
+                    DuoPrefs.setCelebrated(app, mark)
+                    celebrated = mark
+                },
+            )
         }
 
         pending?.let { d ->

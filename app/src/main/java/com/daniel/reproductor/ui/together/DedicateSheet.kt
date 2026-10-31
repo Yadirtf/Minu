@@ -126,7 +126,7 @@ fun DedicateSheet(
 }
 
 @Composable
-private fun SongPick(song: Song, thumbnail: Any, onClick: () -> Unit) {
+internal fun SongPick(song: Song, thumbnail: Any, onClick: () -> Unit) {
     Row(
         Modifier.fillMaxWidth().clickable(onClick = onClick).padding(vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically,

@@ -34,6 +34,17 @@ data class Dedication(
     val reactions: List<Reaction>,
 )
 
+/** El día en que empezó la relación, la canción de origen y cómo empezó (de los dos). */
+data class DuoOrigin(
+    val startedOn: String, // AAAA-MM-DD
+    val song: Song?,
+    val story: String,
+    val setByName: String,
+    val setByMe: Boolean,
+)
+
+data class DuoInfo(val origin: DuoOrigin?, val dedicationCount: Int)
+
 /** Cliente HTTP del servidor de Minu. */
 class CloudApi(baseClient: OkHttpClient, private val session: Session) {
 
@@ -104,6 +115,16 @@ class CloudApi(baseClient: OkHttpClient, private val session: Session) {
     suspend fun react(id: String, emoji: String): Dedication =
         parseDedication(call("POST", "/dedications/$id/react", JSONObject().put("emoji", emoji)).getJSONObject("dedication"))
 
+    /** Lo compartido en Dúo; null si no hay pareja vinculada. */
+    suspend fun duo(): DuoInfo? = parseDuo(call("GET", "/duo"))
+
+    suspend fun saveOrigin(startedOn: String, song: Song?, story: String): DuoInfo? = parseDuo(
+        call(
+            "PUT", "/duo/origin",
+            JSONObject().put("startedOn", startedOn).put("song", song?.let(::songJson) ?: JSONObject.NULL).put("story", story),
+        )
+    )
+
     private suspend fun call(method: String, path: String, body: JSONObject? = null, auth: Boolean = true): JSONObject =
         withContext(Dispatchers.IO) {
             val token = session.account.value?.token
@@ -156,6 +177,20 @@ class CloudApi(baseClient: OkHttpClient, private val session: Session) {
                 json.optString("status", "none"),
                 p?.let { PartnerInfo(it.optString("username"), it.optString("displayName"), it.optBoolean("online")) },
             )
+        }
+
+        fun parseDuo(json: JSONObject): DuoInfo? {
+            if (!json.optBoolean("linked")) return null
+            val origin = json.optJSONObject("origin")?.let { o ->
+                DuoOrigin(
+                    startedOn = o.getString("startedOn"),
+                    song = o.optJSONObject("song")?.let(::parseSong),
+                    story = o.optString("story"),
+                    setByName = o.optString("setByName"),
+                    setByMe = o.optBoolean("setByMe"),
+                )
+            }
+            return DuoInfo(origin, json.optJSONObject("stats")?.optInt("dedications") ?: 0)
         }
 
         fun parseDedication(json: JSONObject): Dedication {

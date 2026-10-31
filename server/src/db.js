@@ -3,6 +3,11 @@ import { ObjectId } from 'mongodb';
 export const users = (db) => db.collection('users');
 export const libraries = (db) => db.collection('libraries');
 export const dedications = (db) => db.collection('dedications');
+/** Una por pareja (_id = coupleKey): fecha de inicio y todo lo que comparten en Dúo. */
+export const couples = (db) => db.collection('couples');
+
+/** Llave de la pareja: los dos ids ordenados, así sobrevive si se desvinculan y vuelven. */
+export const coupleKey = (a, b) => [String(a), String(b)].sort().join('_');
 
 export async function ensureIndexes(db) {
   await users(db).createIndex({ username: 1 }, { unique: true });

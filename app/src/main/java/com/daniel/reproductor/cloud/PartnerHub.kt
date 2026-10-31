@@ -74,6 +74,10 @@ class PartnerHub(
     private val _dedications = MutableStateFlow<List<Dedication>>(emptyList())
     val dedications: StateFlow<List<Dedication>> = _dedications.asStateFlow()
 
+    private val _duo = MutableStateFlow<DuoInfo?>(null)
+    /** Lo compartido en Dúo (nuestra fecha); null sin pareja. */
+    val duo: StateFlow<DuoInfo?> = _duo.asStateFlow()
+
     private val _connected = MutableStateFlow(false)
     val connected: StateFlow<Boolean> = _connected.asStateFlow()
 
@@ -101,6 +105,7 @@ class PartnerHub(
                 if (account == null) {
                     _partner.value = null
                     _dedications.value = emptyList()
+                    setDuo(null)
                     _listen.value = ListenSession()
                 } else {
                     refresh()
@@ -120,7 +125,18 @@ class PartnerHub(
         scope.launch {
             runCatching { _partner.value = api.partner() }
             runCatching { _dedications.value = api.dedications() }
+            if (_partner.value?.linked == true) runCatching { setDuo(api.duo()) } else if (_partner.value != null) setDuo(null)
         }
+    }
+
+    // ---------- Nuestra fecha ----------
+
+    suspend fun saveOrigin(startedOn: String, song: Song?, story: String) = setDuo(api.saveOrigin(startedOn, song, story))
+
+    /** También la guarda en el celular para los avisos de mesiversario (con la app cerrada). */
+    private fun setDuo(info: DuoInfo?) {
+        _duo.value = info
+        DuoPrefs.save(context, info?.origin?.startedOn, _partner.value?.partner?.displayName)
     }
 
     // ---------- Pareja ----------
@@ -280,7 +296,7 @@ class PartnerHub(
     private suspend fun handle(msg: JSONObject) {
         when (msg.optString("type")) {
             "pong" -> latencyMs = ((System.currentTimeMillis() - msg.optLong("t")) / 2).coerceIn(0, 2_000)
-            "hello", "partner.update" -> refresh()
+            "hello", "partner.update", "duo.update" -> refresh()
             "presence" -> {
                 val online = msg.optBoolean("online")
                 _partner.update { p -> p?.copy(partner = p.partner?.copy(online = online)) }
