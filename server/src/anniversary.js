@@ -86,7 +86,7 @@ async function dedicationsBetween(db, me, tz, from, to) {
       $or: [{ from: me._id, to: me.partnerId }, { from: me.partnerId, to: me._id }],
       createdAt: { $gte: new Date(`${addDays(from, -1)}T00:00:00Z`), $lt: new Date(`${addDays(to, 1)}T00:00:00Z`) },
     })
-    .sort({ createdAt: 1 })
+    .sort({ createdAt: 1, _id: 1 })
     .toArray();
   return list.filter((d) => {
     const day = localDay(tz, d.createdAt);

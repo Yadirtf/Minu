@@ -427,6 +427,7 @@ test('aniversario: se abre con el abrazo de los dos, cuenta su año, abre las ca
     at('2025-01-05');
     await api('PUT', '/duo/origin', { startedOn: '2024-06-10', story: 'En el bus, compartiendo audífonos' }, a);
     await api('POST', '/dedications', { song: song('aaaaaaaaaaa', 'La nuestra'), message: 'la primera' }, a);
+    fakeNow = new Date('2025-01-05T16:00:00Z');
     await api('POST', '/dedications', { song: song('aaaaaaaaaaa', 'La nuestra') }, b);
     at('2025-01-06');
     await api('POST', '/dedications', { song: song('bbbbbbbbbbb', 'Otra') }, a);
