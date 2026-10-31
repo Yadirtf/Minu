@@ -4,7 +4,7 @@ import { cleanSong, coupleKey, couples, dedications, libraries, publicUser, toId
 import { requireAuth, signToken } from './auth.js';
 import { chooseRescue, giveUpRescue, markDedication, refreshStreak, RESCUE_TYPES, streakView, validTimeZone } from './duo.js';
 import { anniversariesView, anniversaryView, hug, openSolo, sealedLetters, voteSong, writeLetter } from './anniversary.js';
-import { answerCapsule, ensureCapsule, missionsView, mixtape, markMission, openedCapsules, serializeCapsule } from './memories.js';
+import { answerCapsule, dedicationDays, ensureCapsule, joinedOn, missionsView, mixtape, markMission, openedCapsules, serializeCapsule } from './memories.js';
 
 const USERNAME = /^[a-z0-9_.]{3,24}$/;
 const EMOJIS = new Set(['❤️', '😍', '🔥', '😘', '💃', '🎶']);
@@ -328,7 +328,7 @@ export function createApp(db, config, realtime, services = {}) {
   app.get('/duo/memories', auth, async (req, res) => {
     const me = req.user;
     if (!me.partnerId) return fail(res, 409, 'Primero vincula a tu pareja.');
-    res.json({ capsules: await openedCapsules(db, me) });
+    res.json({ capsules: await openedCapsules(db, me), days: await dedicationDays(db, me) });
   });
 
   // Cinta del mes: ?from=AAAA-MM-DD&to=AAAA-MM-DD (to sin incluir)
@@ -512,6 +512,8 @@ async function duoState(db, me, now = new Date()) {
           setAt: o.setAt.getTime(),
         }
       : null,
+    // Desde cuándo usan Minu juntos: de aquí en adelante hay Cintas del mes
+    joinedOn: await joinedOn(db, couple, me),
     stats: { dedications: await dedications(db).countDocuments(between), listenSec: streak.listenSec },
     missions: missionsView(couple, me._id, me.partnerId),
     anniversaries: anniversariesView(couple, streak.today),

@@ -84,6 +84,8 @@ data class DuoInfo(
     val missions: Map<Int, MissionState> = emptyMap(),
     val anniversaries: List<AnniversaryEntry> = emptyList(),
     val letter: SealedLetter? = null,
+    /** Desde cuándo usan Minu juntos (AAAA-MM-DD): las Cintas del mes empiezan aquí. */
+    val joinedOn: String? = null,
 )
 
 /** Un aniversario cumplido: [opened] cuando ya lo abrieron (con el abrazo o solos). */
@@ -134,6 +136,9 @@ data class Capsule(
     val partner: List<CapsuleAnswer>?,
     val openedAt: Long?,
 )
+
+/** Lo que guarda Recuerdos: las cápsulas abiertas y cuántas dedicatorias hubo cada día (AAAA-MM-DD). */
+data class Memories(val capsules: List<Capsule>, val dedicationsByDay: Map<String, Int>)
 
 data class MixtapeTrack(val song: Song, val message: String, val day: String)
 
@@ -235,10 +240,12 @@ class CloudApi(baseClient: OkHttpClient, private val session: Session) {
         return parseCapsule(call("POST", "/duo/capsule", JSONObject().put("answers", list)).getJSONObject("capsule"))
     }
 
-    /** Cápsulas ya abiertas, de la más nueva a la más vieja. */
-    suspend fun memories(): List<Capsule> {
-        val array = call("GET", "/duo/memories").getJSONArray("capsules")
-        return (0 until array.length()).map { parseCapsule(array.getJSONObject(it)) }
+    /** Cápsulas ya abiertas (de la más nueva a la más vieja) y dedicatorias por día. */
+    suspend fun memories(): Memories {
+        val json = call("GET", "/duo/memories")
+        val array = json.getJSONArray("capsules")
+        val days = json.optJSONObject("days")?.let { d -> d.keys().asSequence().associateWith { d.optInt(it) } } ?: emptyMap()
+        return Memories((0 until array.length()).map { parseCapsule(array.getJSONObject(it)) }, days)
     }
 
     /** [from] incluido, [to] sin incluir (AAAA-MM-DD). */
@@ -347,6 +354,7 @@ class CloudApi(baseClient: OkHttpClient, private val session: Session) {
                 letter = json.optJSONObject("letter")?.let {
                     SealedLetter(it.getInt("year"), it.optString("opensOn"), it.optStringOrNull("mine"), it.optBoolean("partnerWrote"))
                 },
+                joinedOn = json.optStringOrNull("joinedOn"),
             )
         }
 
