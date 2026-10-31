@@ -174,7 +174,7 @@ fun TogetherScreen(vm: TogetherViewModel, lib: LibraryViewModel, player: PlayerS
         }
         if (linkedPartner != null) {
             item { OriginLine(duo, onEdit = { editingOrigin = true }) }
-            duo?.anniversaries?.lastOrNull { !it.opened }?.let { gift ->
+            duo?.anniversaries?.lastOrNull { !it.opened && !it.beforeMinu }?.let { gift ->
                 item { GiftCard(gift.years, linkedPartner.displayName) { vm.showAnniversary(gift.years) } }
             }
             item { MemoriesEntry { showMemories = true } }

@@ -1,6 +1,6 @@
 import { capsules, coupleKey, couples, dedications, letters } from './db.js';
 import { addDays, localDay } from './duo.js';
-import { serializeCapsule } from './memories.js';
+import { joinedOn, serializeCapsule } from './memories.js';
 
 /** Cuánto puede separarse el abrazo de los dos (cada celular lo repite mientras lo mantienen). */
 export const HUG_WINDOW_MS = 6000;
@@ -39,16 +39,23 @@ async function load(db, me, years, now) {
   const today = localDay(couple.tz, now);
   const date = anniversaryDate(start, years);
   if (date > today) return { error: 'Ese aniversario todavía no llega.' };
+  // Los aniversarios que vivieron antes de llegar a Minu no tienen recuerdos guardados aquí
+  const joined = await joinedOn(db, couple, me);
+  if (joined && date < joined) return { error: 'Ese aniversario fue antes de que llegaran a Minu.' };
   return { key, couple, start, today, date, state: couple.anniversaries?.[years] ?? {} };
 }
 
-/** Lista de aniversarios cumplidos, para Dúo y Recuerdos. */
-export function anniversariesView(couple, today) {
+/**
+ * Lista de aniversarios cumplidos, para Dúo y Recuerdos. [joined] es desde cuándo usan Minu: los anteriores
+ * se marcan beforeMinu (se muestran como parte de su historia, pero no hay regalo que abrir).
+ */
+export function anniversariesView(couple, today, joined = null) {
   const start = couple?.origin?.startedOn;
   if (!start) return [];
   return Array.from({ length: yearsDone(start, today) }, (_, i) => {
     const years = i + 1;
-    return { years, date: anniversaryDate(start, years), opened: Boolean(couple.anniversaries?.[years]?.openedAt) };
+    const date = anniversaryDate(start, years);
+    return { years, date, opened: Boolean(couple.anniversaries?.[years]?.openedAt), beforeMinu: Boolean(joined && date < joined) };
   });
 }
 

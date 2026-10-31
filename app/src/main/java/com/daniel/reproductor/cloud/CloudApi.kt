@@ -88,8 +88,11 @@ data class DuoInfo(
     val joinedOn: String? = null,
 )
 
-/** Un aniversario cumplido: [opened] cuando ya lo abrieron (con el abrazo o solos). */
-data class AnniversaryEntry(val years: Int, val date: String, val opened: Boolean)
+/**
+ * Un aniversario cumplido: [opened] cuando ya lo abrieron (con el abrazo o solos). [beforeMinu] si fue antes
+ * de que llegaran a Minu: es parte de su historia, pero no hay regalo que abrir.
+ */
+data class AnniversaryEntry(val years: Int, val date: String, val opened: Boolean, val beforeMinu: Boolean = false)
 
 /** Mi carta para el próximo aniversario, sellada hasta que lo abran. */
 data class SealedLetter(val year: Int, val opensOn: String, val mine: String?, val partnerWrote: Boolean)
@@ -349,7 +352,7 @@ class CloudApi(baseClient: OkHttpClient, private val session: Session) {
                 origin, stats?.optInt("dedications") ?: 0, stats?.optLong("listenSec") ?: 0,
                 json.optJSONObject("streak")?.let(::parseStreak), missions,
                 anniversaries = objects(json.optJSONArray("anniversaries")).map {
-                    AnniversaryEntry(it.getInt("years"), it.optString("date"), it.optBoolean("opened"))
+                    AnniversaryEntry(it.getInt("years"), it.optString("date"), it.optBoolean("opened"), it.optBoolean("beforeMinu"))
                 },
                 letter = json.optJSONObject("letter")?.let {
                     SealedLetter(it.getInt("year"), it.optString("opensOn"), it.optStringOrNull("mine"), it.optBoolean("partnerWrote"))
