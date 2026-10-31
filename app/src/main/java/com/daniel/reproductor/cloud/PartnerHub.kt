@@ -136,6 +136,7 @@ class PartnerHub(
     suspend fun saveOrigin(startedOn: String, song: Song?, story: String) = setDuo(api.saveOrigin(startedOn, song, story))
     suspend fun chooseRescue(type: String) = setDuo(api.chooseRescue(type))
     suspend fun giveUpRescue() = setDuo(api.giveUpRescue())
+    suspend fun markMission(month: Int, done: Boolean) = setDuo(api.markMission(month, done))
 
     /** Solo lo de Dúo (racha y fecha), sin pedir de nuevo pareja y cartas. */
     fun refreshDuo() {
@@ -380,6 +381,15 @@ class PartnerHub(
                 runCatching { future.get() }.onSuccess { cont.resume(it) }.onFailure { cont.resumeWithException(it) }
             }, ContextCompat.getMainExecutor(context))
         }.also { controller = it }
+    }
+
+    /** Reproduce varias canciones seguidas (la Cinta del mes). */
+    suspend fun playSongs(songs: List<Song>) {
+        if (songs.isEmpty()) return
+        val p = player()
+        p.setMediaItems(songs.map { PlaybackItems.fromSong(it, files) })
+        p.prepare()
+        p.play()
     }
 
     /** Reproduce una canción en este celular (dedicatorias). */

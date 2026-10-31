@@ -355,3 +355,63 @@ test('racha: los dos dedican, se olvidan, eligen el reto, lo cumplen escuchando 
     fakeNow = null;
   }
 });
+
+test('cápsula: salva la racha cuando los dos sellan sus tres canciones; cinta del mes y misiones', async () => {
+  const a = (await register('frida')).body.token;
+  const b = (await register('diego')).body.token;
+  await api('POST', '/partner/request', { username: 'diego' }, a);
+  await api('POST', '/partner/accept', null, b);
+  const song = (id, title) => ({ videoId: id, title, uploader: 'X', durationSec: 200, thumbnailUrl: '' });
+  const at = (day) => (fakeNow = new Date(`${day}T15:00:00Z`));
+  try {
+    at('2026-05-01');
+    await api('POST', '/dedications', { song: song('aaaaaaaaaaa', 'De Lucía'), message: 'para ti' }, a);
+    await api('POST', '/dedications', { song: song('bbbbbbbbbbb', 'De Mateo') }, b);
+    at('2026-05-02');
+    await api('POST', '/dedications', { song: song('ccccccccccc', 'Otra de Lucía') }, a);
+
+    // Cinta del mes: lado A las mías, lado B las suyas
+    const tape = (await api('GET', '/duo/mixtape?from=2026-05-01&to=2026-06-01', null, a)).body;
+    assert.deepEqual(tape.sideA.map((t) => t.song.title), ['De Lucía', 'Otra de Lucía']);
+    assert.deepEqual(tape.sideB.map((t) => t.song.title), ['De Mateo']);
+    assert.equal(tape.sideA[0].message, 'para ti');
+    assert.equal((await api('GET', '/duo/mixtape?from=2026-06-01&to=2026-05-01', null, a)).status, 400);
+
+    at('2026-05-03'); // Mateo no dedicó el 2: toca reto
+    assert.equal((await api('GET', '/duo/capsule', null, a)).body.capsule, null);
+    await api('POST', '/duo/rescue', { type: 'capsule' }, b);
+    const open = (await api('GET', '/duo/capsule', null, a)).body.capsule;
+    assert.equal(open.prompts.length, 3);
+    assert.equal(new Set(open.prompts).size, 3);
+    assert.equal(open.partnerDone, false);
+
+    const answers = [song('ddddddddddd', '1'), song('eeeeeeeeeee', '2'), song('fffffffffff', '3')].map((s) => ({ song: s, note: 'porque sí' }));
+    assert.equal((await api('POST', '/duo/capsule', { answers: answers.slice(0, 2) }, a)).status, 409);
+    const sealed = (await api('POST', '/duo/capsule', { answers }, a)).body.capsule;
+    assert.equal(sealed.mine.length, 3);
+    assert.equal(sealed.openedAt, null);
+    assert.equal((await api('POST', '/duo/capsule', { answers }, a)).status, 409); // ya sellada
+    assert.equal((await api('POST', '/duo/rescue', { type: 'listen' }, a)).status, 409); // ya empezó
+    // Mateo no ve las de Lucía hasta terminar
+    const forB = (await api('GET', '/duo/capsule', null, b)).body.capsule;
+    assert.equal(forB.partnerDone, true);
+    assert.equal(forB.partner, null);
+
+    const opened = (await api('POST', '/duo/capsule', { answers }, b)).body.capsule;
+    assert.ok(opened.openedAt);
+    assert.equal(opened.partner.length, 3);
+    const duo = (await api('GET', '/duo', null, a)).body;
+    assert.equal(duo.streak.count, 3);
+    assert.deepEqual(duo.streak.saved, { day: '2026-05-03', type: 'capsule' });
+    assert.equal((await api('GET', '/duo/memories', null, b)).body.capsules.length, 1);
+
+    // Misión del mes: queda cumplida cuando marcan los dos
+    let m = (await api('POST', '/duo/missions/3', { done: true }, a)).body.missions;
+    assert.deepEqual(m['3'], { mine: true, partner: false });
+    m = (await api('POST', '/duo/missions/3', { done: true }, b)).body.missions;
+    assert.deepEqual(m['3'], { mine: true, partner: true });
+    assert.equal((await api('POST', '/duo/missions/0', { done: true }, b)).status, 400);
+  } finally {
+    fakeNow = null;
+  }
+});

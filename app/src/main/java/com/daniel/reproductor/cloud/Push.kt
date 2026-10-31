@@ -119,8 +119,12 @@ class MinuMessagingService : FirebaseMessagingService() {
             "partner.accepted" -> notify(3, Push.CHANNEL_TOGETHER, "❤️ $from aceptó tu invitación", "Ya pueden dedicarse canciones y escuchar juntos.")
             "streak.rescue" -> notify(
                 6, Push.CHANNEL_TOGETHER, "🧵 $from eligió salvar el hilo",
-                "Hoy toca escuchar juntos 30 minutos. Invítale desde Dúo.",
+                if (data["rescue"] == "capsule") "Hoy toca la cápsula de tres canciones. Ábrela en Dúo."
+                else "Hoy toca escuchar juntos 30 minutos. Invítale desde Dúo.",
             )
+            "capsule.sealed" -> notify(7, Push.CHANNEL_TOGETHER, "💌 $from selló su cápsula", "Te toca: responde tus tres canciones y se abrirá para los dos.")
+            "capsule.opened" -> notify(7, Push.CHANNEL_TOGETHER, "✨ Su cápsula se abrió", "Salvaron el hilo. Entra a Dúo para ver qué respondió $from.")
+            "mission.done" -> notify(8, Push.CHANNEL_TOGETHER, "🎶 $from marcó la misión del mes", "Si ya la hicieron, márcala tú también en Dúo.")
             "duo.origin" -> notify(5, Push.CHANNEL_TOGETHER, "💞 $from guardó el día en que empezó todo", "Abre Dúo para ver cuánto tiempo llevan juntos.")
             "listen.invite" -> notify(
                 4, Push.CHANNEL_TOGETHER, "🎧 $from quiere escuchar música contigo", "Toca para unirte.",

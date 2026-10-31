@@ -7,7 +7,10 @@ import androidx.lifecycle.viewmodel.viewModelFactory
 import com.daniel.reproductor.cloud.Account
 import com.daniel.reproductor.cloud.CloudApi
 import com.daniel.reproductor.cloud.CloudSync
+import com.daniel.reproductor.cloud.Capsule
+import com.daniel.reproductor.cloud.CapsuleAnswer
 import com.daniel.reproductor.cloud.Dedication
+import com.daniel.reproductor.cloud.Mixtape
 import com.daniel.reproductor.cloud.DuoInfo
 import com.daniel.reproductor.cloud.HubEvent
 import com.daniel.reproductor.cloud.ListenSession
@@ -120,7 +123,56 @@ class TogetherViewModel(
     fun saveOrigin(startedOn: String, song: Song?, story: String) =
         action("Guardado. Su hilo ya sabe desde cuándo los une 💞") { hub.saveOrigin(startedOn, song, story) }
 
-    fun chooseRescue(type: String) = action { hub.chooseRescue(type) }
+    fun chooseRescue(type: String) = action {
+        hub.chooseRescue(type)
+        if (type == "capsule") _capsuleOpen.value = true
+    }
+
+    // ---------- Recuerdos: cápsula, Cinta del mes y misiones ----------
+
+    private val _capsule = MutableStateFlow<Capsule?>(null)
+    val capsule: StateFlow<Capsule?> = _capsule.asStateFlow()
+
+    /** Pantalla de la cápsula abierta (se abre al elegir el reto o desde la tarjeta del rescate). */
+    private val _capsuleOpen = MutableStateFlow(false)
+    val capsuleOpen: StateFlow<Boolean> = _capsuleOpen.asStateFlow()
+    fun showCapsule(open: Boolean) {
+        _capsuleOpen.value = open
+        if (open) loadCapsule()
+    }
+
+    fun loadCapsule() = viewModelScope.launch { runCatching { _capsule.value = api.capsule() } }
+
+    fun sendCapsule(answers: List<CapsuleAnswer>) = action {
+        val result = api.answerCapsule(answers)
+        _capsule.value = result
+        hub.refreshDuo()
+        _messages.send(if (result.openedAt != null) "¡La cápsula se abrió! Salvaron el hilo ✨" else "Sellada 💌 Se abre cuando tu pareja responda.")
+    }
+
+    private val _memories = MutableStateFlow<List<Capsule>?>(null)
+    val memories: StateFlow<List<Capsule>?> = _memories.asStateFlow()
+    fun loadMemories() = viewModelScope.launch { runCatching { _memories.value = api.memories() } }
+
+    private val _mixtape = MutableStateFlow<Mixtape?>(null)
+    val mixtape: StateFlow<Mixtape?> = _mixtape.asStateFlow()
+    fun loadMixtape(from: String, to: String) = viewModelScope.launch {
+        _mixtape.value = null
+        try {
+            _mixtape.value = api.mixtape(from, to)
+        } catch (e: UserFacingException) {
+            _messages.send(e.message.orEmpty())
+        }
+    }
+
+    /** Recuerdos abiertos desde fuera (el mesiversario): el número del mes cuya cinta se muestra. */
+    private val _openTape = MutableStateFlow<Int?>(null)
+    val openTape: StateFlow<Int?> = _openTape.asStateFlow()
+    fun requestTape(month: Int?) { _openTape.value = month }
+
+    fun markMission(month: Int, done: Boolean) = action(if (done) "Misión marcada 🎶" else null) { hub.markMission(month, done) }
+
+    fun playAll(songs: List<Song>) = viewModelScope.launch { runCatching { hub.playSongs(songs) } }
     fun giveUpRescue() = action { hub.giveUpRescue() }
 
     fun playSong(song: Song) = viewModelScope.launch { runCatching { hub.playSong(song) } }

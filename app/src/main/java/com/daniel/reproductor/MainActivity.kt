@@ -378,7 +378,12 @@ internal fun AppRoot(
             StreakOverlay(
                 moment = moment,
                 partner = partnerName,
-                onChoose = { type -> together.chooseRescue(type); markStreakSeen(moment) },
+                onChoose = { type ->
+                    val current = (moment as? StreakMoment.AtRisk)?.streak?.rescue?.type
+                    if (current == type) together.showCapsule(true) else together.chooseRescue(type)
+                    markStreakSeen(moment)
+                    if (type == "capsule") goTo(Tab.TOGETHER)
+                },
                 onGiveUp = { together.giveUpRescue(); markStreakSeen(moment) },
                 onRetie = { markStreakSeen(moment); goTo(Tab.TOGETHER) },
                 onDismiss = { markStreakSeen(moment) },
@@ -395,6 +400,13 @@ internal fun AppRoot(
                     val mark = "$today:${milestone.key}"
                     DuoPrefs.setCelebrated(app, mark)
                     celebrated = mark
+                },
+                onOpenTape = { month ->
+                    val mark = "$today:${milestone.key}"
+                    DuoPrefs.setCelebrated(app, mark)
+                    celebrated = mark
+                    together.requestTape(month)
+                    goTo(Tab.TOGETHER)
                 },
             )
         }

@@ -2,7 +2,8 @@ import express from 'express';
 import bcrypt from 'bcryptjs';
 import { cleanSong, coupleKey, couples, dedications, libraries, publicUser, toId, users } from './db.js';
 import { requireAuth, signToken } from './auth.js';
-import { chooseRescue, giveUpRescue, markDedication, RESCUE_TYPES, streakView, validTimeZone } from './duo.js';
+import { chooseRescue, giveUpRescue, markDedication, refreshStreak, RESCUE_TYPES, streakView, validTimeZone } from './duo.js';
+import { answerCapsule, ensureCapsule, missionsView, mixtape, markMission, openedCapsules, serializeCapsule } from './memories.js';
 
 const USERNAME = /^[a-z0-9_.]{3,24}$/;
 const EMOJIS = new Set(['❤️', '😍', '🔥', '😘', '💃', '🎶']);
@@ -208,7 +209,7 @@ export function createApp(db, config, realtime, services = {}) {
       song,
       message: String(req.body?.message || '').slice(0, 500),
       autoplay: Boolean(req.body?.autoplay),
-      createdAt: new Date(),
+      createdAt: clock(),
       seenAt: null,
       reactions: [],
     };
@@ -285,8 +286,69 @@ export function createApp(db, config, realtime, services = {}) {
     if (!RESCUE_TYPES.has(type)) return fail(res, 400, 'Reto inválido.');
     const result = await chooseRescue(db, me, type, clock());
     if (result.error) return fail(res, 409, result.error);
+    if (type === 'capsule') {
+      const { key, today } = await refreshStreak(db, me._id, me.partnerId, clock());
+      await ensureCapsule(db, key, today, clock());
+    }
     if (!realtime.notify(me.partnerId, { type: 'duo.update' })) {
       await push.send(me.partnerId, { type: 'streak.rescue', fromName: me.displayName, rescue: type });
+    }
+    res.json(await duoState(db, me, clock()));
+  });
+
+  // ---------- Recuerdos: cápsula, Cinta del mes y misiones ----------
+
+  // La cápsula del día del reto (preguntas, mis respuestas y, cuando se abre, las suyas)
+  app.get('/duo/capsule', auth, async (req, res) => {
+    const me = req.user;
+    if (!me.partnerId) return fail(res, 409, 'Primero vincula a tu pareja.');
+    const { couple, key, today } = await refreshStreak(db, me._id, me.partnerId, clock());
+    const rescue = couple.streak.rescue;
+    if (rescue?.type !== 'capsule' || rescue.day !== today) return res.json({ capsule: null });
+    const capsule = await ensureCapsule(db, key, today, clock());
+    res.json({ capsule: serializeCapsule(capsule, me._id, me.partnerId) });
+  });
+
+  app.post('/duo/capsule', auth, async (req, res) => {
+    const me = req.user;
+    if (!me.partnerId) return fail(res, 409, 'Primero vincula a tu pareja.');
+    const result = await answerCapsule(db, me, req.body, clock());
+    if (result.error) return fail(res, 409, result.error);
+    if (result.opened) {
+      realtime.notify(me.partnerId, { type: 'streak.saved' });
+      realtime.notify(me._id, { type: 'streak.saved' });
+      await push.send(me.partnerId, { type: 'capsule.opened', fromName: me.displayName });
+    } else if (!realtime.notify(me.partnerId, { type: 'duo.update' })) {
+      await push.send(me.partnerId, { type: 'capsule.sealed', fromName: me.displayName });
+    }
+    res.json({ capsule: serializeCapsule(result.capsule, me._id, me.partnerId) });
+  });
+
+  app.get('/duo/memories', auth, async (req, res) => {
+    const me = req.user;
+    if (!me.partnerId) return fail(res, 409, 'Primero vincula a tu pareja.');
+    res.json({ capsules: await openedCapsules(db, me) });
+  });
+
+  // Cinta del mes: ?from=AAAA-MM-DD&to=AAAA-MM-DD (to sin incluir)
+  app.get('/duo/mixtape', auth, async (req, res) => {
+    const me = req.user;
+    if (!me.partnerId) return fail(res, 409, 'Primero vincula a tu pareja.');
+    const day = /^\d{4}-\d{2}-\d{2}$/;
+    const from = String(req.query.from || '');
+    const to = String(req.query.to || '');
+    if (!day.test(from) || !day.test(to) || from >= to) return fail(res, 400, 'Fechas inválidas.');
+    res.json(await mixtape(db, me, from, to));
+  });
+
+  app.post('/duo/missions/:month', auth, async (req, res) => {
+    const me = req.user;
+    if (!me.partnerId) return fail(res, 409, 'Primero vincula a tu pareja.');
+    const month = Number(req.params.month);
+    if (!Number.isInteger(month) || month < 1 || month > 1200) return fail(res, 400, 'Mes inválido.');
+    await markMission(db, me, month, req.body?.done !== false);
+    if (!realtime.notify(me.partnerId, { type: 'duo.update' }) && req.body?.done !== false) {
+      await push.send(me.partnerId, { type: 'mission.done', fromName: me.displayName });
     }
     res.json(await duoState(db, me, clock()));
   });
@@ -383,6 +445,7 @@ async function duoState(db, me, now = new Date()) {
         }
       : null,
     stats: { dedications: await dedications(db).countDocuments(between), listenSec: streak.listenSec },
+    missions: missionsView(couple, me._id, me.partnerId),
     streak,
   };
 }

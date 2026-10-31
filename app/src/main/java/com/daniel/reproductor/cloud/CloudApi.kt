@@ -71,7 +71,38 @@ data class DuoStreak(
     val inDanger get() = state != "active"
 }
 
-data class DuoInfo(val origin: DuoOrigin?, val dedicationCount: Int, val listenSec: Long = 0, val streak: DuoStreak? = null)
+/** Misión del mes: cada uno marca "Lo hicimos". */
+data class MissionState(val mine: Boolean, val partner: Boolean) {
+    val done get() = mine && partner
+}
+
+data class DuoInfo(
+    val origin: DuoOrigin?,
+    val dedicationCount: Int,
+    val listenSec: Long = 0,
+    val streak: DuoStreak? = null,
+    val missions: Map<Int, MissionState> = emptyMap(),
+)
+
+data class CapsuleAnswer(val song: Song, val note: String)
+
+/** La cápsula de tres canciones. [partner] llega solo cuando se abrió (los dos respondieron). */
+data class Capsule(
+    val day: String,
+    val prompts: List<String>,
+    val mine: List<CapsuleAnswer>?,
+    val partnerDone: Boolean,
+    val partner: List<CapsuleAnswer>?,
+    val openedAt: Long?,
+)
+
+data class MixtapeTrack(val song: Song, val message: String, val day: String)
+
+/** La Cinta del mes: lado A tus dedicatorias, lado B las de tu pareja. */
+data class Mixtape(val from: String, val to: String, val sideA: List<MixtapeTrack>, val sideB: List<MixtapeTrack>) {
+    /** Las dos caras mezcladas en el orden en que se dedicaron. */
+    val inOrder get() = (sideA + sideB).sortedBy { it.day }
+}
 
 /** Cliente HTTP del servidor de Minu. */
 class CloudApi(baseClient: OkHttpClient, private val session: Session) {
@@ -156,6 +187,37 @@ class CloudApi(baseClient: OkHttpClient, private val session: Session) {
     suspend fun chooseRescue(type: String): DuoInfo? = parseDuo(call("POST", "/duo/rescue", JSONObject().put("type", type)))
     suspend fun giveUpRescue(): DuoInfo? = parseDuo(call("POST", "/duo/rescue/giveup", JSONObject()))
 
+    /** La cápsula del día del reto, o null si hoy no toca. */
+    suspend fun capsule(): Capsule? = call("GET", "/duo/capsule").optJSONObject("capsule")?.let(::parseCapsule)
+
+    suspend fun answerCapsule(answers: List<CapsuleAnswer>): Capsule {
+        val list = JSONArray()
+        answers.forEach { list.put(JSONObject().put("song", songJson(it.song)).put("note", it.note)) }
+        return parseCapsule(call("POST", "/duo/capsule", JSONObject().put("answers", list)).getJSONObject("capsule"))
+    }
+
+    /** Cápsulas ya abiertas, de la más nueva a la más vieja. */
+    suspend fun memories(): List<Capsule> {
+        val array = call("GET", "/duo/memories").getJSONArray("capsules")
+        return (0 until array.length()).map { parseCapsule(array.getJSONObject(it)) }
+    }
+
+    /** [from] incluido, [to] sin incluir (AAAA-MM-DD). */
+    suspend fun mixtape(from: String, to: String): Mixtape {
+        val json = call("GET", "/duo/mixtape?from=$from&to=$to")
+        fun side(name: String): List<MixtapeTrack> {
+            val array = json.optJSONArray(name) ?: JSONArray()
+            return (0 until array.length()).map {
+                val t = array.getJSONObject(it)
+                MixtapeTrack(parseSong(t.getJSONObject("song")), t.optString("message"), t.optString("day"))
+            }
+        }
+        return Mixtape(from, to, side("sideA"), side("sideB"))
+    }
+
+    suspend fun markMission(month: Int, done: Boolean): DuoInfo? =
+        parseDuo(call("POST", "/duo/missions/$month", JSONObject().put("done", done)))
+
     private suspend fun call(method: String, path: String, body: JSONObject? = null, auth: Boolean = true): JSONObject =
         withContext(Dispatchers.IO) {
             val token = session.account.value?.token
@@ -224,7 +286,35 @@ class CloudApi(baseClient: OkHttpClient, private val session: Session) {
                 )
             }
             val stats = json.optJSONObject("stats")
-            return DuoInfo(origin, stats?.optInt("dedications") ?: 0, stats?.optLong("listenSec") ?: 0, json.optJSONObject("streak")?.let(::parseStreak))
+            val missions = json.optJSONObject("missions")?.let { m ->
+                m.keys().asSequence().mapNotNull { k ->
+                    val v = m.optJSONObject(k) ?: return@mapNotNull null
+                    k.toIntOrNull()?.let { it to MissionState(v.optBoolean("mine"), v.optBoolean("partner")) }
+                }.toMap()
+            } ?: emptyMap()
+            return DuoInfo(
+                origin, stats?.optInt("dedications") ?: 0, stats?.optLong("listenSec") ?: 0,
+                json.optJSONObject("streak")?.let(::parseStreak), missions,
+            )
+        }
+
+        private fun parseAnswers(array: JSONArray?): List<CapsuleAnswer>? = array?.let {
+            (0 until it.length()).map { i ->
+                val a = it.getJSONObject(i)
+                CapsuleAnswer(parseSong(a.getJSONObject("song")), a.optString("note"))
+            }
+        }
+
+        fun parseCapsule(c: JSONObject): Capsule {
+            val prompts = c.optJSONArray("prompts") ?: JSONArray()
+            return Capsule(
+                day = c.optString("day"),
+                prompts = (0 until prompts.length()).map { prompts.getString(it) },
+                mine = parseAnswers(c.optJSONArray("mine")),
+                partnerDone = c.optBoolean("partnerDone"),
+                partner = parseAnswers(c.optJSONArray("partner")),
+                openedAt = c.optLong("openedAt").takeIf { it > 0 },
+            )
         }
 
         private fun parseStreak(s: JSONObject): DuoStreak {
