@@ -493,8 +493,9 @@ test('aniversario: los que vivieron antes de llegar a Minu se marcan y no se abr
     await api('POST', '/dedications', { song }, a);
     await api('PUT', '/duo/origin', { startedOn: '2019-12-12' }, a);
     fakeNow = new Date('2026-12-13T15:00:00Z');
-    const duo = (await api('GET', '/duo', null, b)).body;
-    assert.equal(duo.joinedOn, '2026-10-20');
+    const res = await api('GET', '/duo', null, b);
+    const duo = res.body;
+    assert.equal(duo.joinedOn, '2026-10-20', JSON.stringify(res));
     assert.equal(duo.anniversaries.length, 7);
     assert.ok(duo.anniversaries.slice(0, 6).every((x) => x.beforeMinu));
     assert.equal(duo.anniversaries[6].beforeMinu, false); // 12 dic 2026: el primero en Minu
