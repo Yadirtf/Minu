@@ -7,6 +7,7 @@ import WebSocket from 'ws';
 import { createApp } from '../src/app.js';
 import { attachRealtime } from '../src/realtime.js';
 import { ensureIndexes } from '../src/db.js';
+import { addListening } from '../src/duo.js';
 
 const config = {
   jwtSecret: 'secreto-de-prueba',
@@ -15,6 +16,8 @@ const config = {
   loginLimitPerMinute: 1000,
 };
 let mongo, client, server, base;
+// Reloj que las pruebas de la racha pueden mover (null = la hora real)
+let fakeNow = null;
 
 // Google falso: el token es "google|sub|correo|nombre"
 const verifyGoogle = async (idToken) => {
@@ -33,7 +36,7 @@ before(async () => {
   const db = client.db('minu-test');
   await ensureIndexes(db);
   const realtime = {};
-  server = http.createServer(createApp(db, config, realtime, { verifyGoogle, push }));
+  server = http.createServer(createApp(db, config, realtime, { verifyGoogle, push, clock: () => fakeNow ?? new Date() }));
   Object.assign(realtime, attachRealtime(server, db, config, push));
   await new Promise((r) => server.listen(0, r));
   base = `http://localhost:${server.address().port}`;
@@ -50,7 +53,11 @@ after(async () => {
 async function api(method, path, body, token) {
   const res = await fetch(base + path, {
     method,
-    headers: { 'content-type': 'application/json', ...(token && { authorization: `Bearer ${token}` }) },
+    headers: {
+      'content-type': 'application/json',
+      'x-timezone': 'America/Bogota',
+      ...(token && { authorization: `Bearer ${token}` }),
+    },
     body: body ? JSON.stringify(body) : undefined,
   });
   return { status: res.status, body: await res.json() };
@@ -281,4 +288,70 @@ test('nuestra fecha: la guarda uno, la ve el otro y sobrevive a desvincularse', 
   await api('POST', '/partner/request', { username: 'julieta' }, romeo);
   await api('POST', '/partner/accept', null, julieta);
   assert.equal((await api('GET', '/duo', null, romeo)).body.origin.startedOn, '2025-02-14');
+});
+
+test('racha: los dos dedican, se olvidan, eligen el reto, lo cumplen escuchando juntos', async () => {
+  const a = (await register('tristan')).body.token;
+  const b = (await register('isolda')).body.token;
+  await api('POST', '/partner/request', { username: 'isolda' }, a);
+  await api('POST', '/partner/accept', null, b);
+  const song = { videoId: 'dQw4w9WgXcQ', title: 'Una', uploader: 'X', durationSec: 200, thumbnailUrl: '' };
+  const at = (day) => (fakeNow = new Date(`${day}T15:00:00Z`)); // 10:00 en Bogotá
+  const streak = async (token) => (await api('GET', '/duo', null, token)).body.streak;
+
+  try {
+    at('2026-03-10');
+    await api('POST', '/dedications', { song }, a);
+    let s = await streak(b);
+    assert.equal(s.count, 0);
+    assert.equal(s.todayPartner, true);
+    assert.equal(s.todayMine, false);
+    await api('POST', '/dedications', { song }, b);
+    assert.equal((await streak(a)).count, 1);
+
+    at('2026-03-11'); // solo dedica uno: el día queda por rescatar
+    await api('POST', '/dedications', { song }, a);
+
+    at('2026-03-12');
+    s = await streak(b);
+    assert.equal(s.state, 'at_risk');
+    assert.equal(s.rescue.missedDay, '2026-03-11');
+    assert.equal(s.rescuesLeft, 3);
+    assert.equal((await api('POST', '/dedications', { song }, a)).status, 409);
+    assert.equal((await api('POST', '/duo/rescue', { type: 'nada' }, b)).status, 400);
+
+    const chosen = await api('POST', '/duo/rescue', { type: 'listen' }, b);
+    assert.equal(chosen.body.streak.state, 'rescuing');
+    assert.equal(chosen.body.streak.rescue.chosenByName, 'isolda');
+    assert.equal(chosen.body.streak.rescuesLeft, 2);
+
+    const db = client.db('minu-test');
+    const ids = await db.collection('users').find({ username: { $in: ['tristan', 'isolda'] } }).toArray();
+    assert.equal(await addListening(db, ids[0]._id, ids[1]._id, 20 * 60, fakeNow), false);
+    assert.equal((await streak(a)).rescue.listenedSec, 20 * 60);
+    assert.equal(await addListening(db, ids[0]._id, ids[1]._id, 10 * 60, fakeNow), true);
+    s = await streak(a);
+    assert.equal(s.state, 'active');
+    assert.equal(s.count, 3);
+    assert.deepEqual(s.saved, { day: '2026-03-12', type: 'listen' });
+    assert.equal(s.listenSec, 30 * 60);
+
+    // Se vuelven a olvidar y esta vez dejan que se rompa: pueden empezar el día 1 ese mismo día
+    at('2026-03-14');
+    assert.equal((await streak(a)).state, 'at_risk');
+    s = (await api('POST', '/duo/rescue/giveup', null, a)).body.streak;
+    assert.equal(s.count, 0);
+    assert.deepEqual(s.broken, { on: '2026-03-14', lost: 3, reason: 'gave_up' });
+    await api('POST', '/dedications', { song }, a);
+    await api('POST', '/dedications', { song }, b);
+    s = await streak(b);
+    assert.equal(s.count, 1);
+    assert.equal(s.best, 3);
+    assert.equal(s.rescuesLeft, 2);
+
+    at('2026-04-01'); // mes nuevo: vuelven a ser 3, no se acumulan
+    assert.equal((await streak(a)).rescuesLeft, 3);
+  } finally {
+    fakeNow = null;
+  }
 });

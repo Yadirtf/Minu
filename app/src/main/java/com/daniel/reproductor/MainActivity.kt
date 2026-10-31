@@ -94,6 +94,8 @@ import com.daniel.reproductor.ui.together.AccountScreen
 import com.daniel.reproductor.ui.together.FloatingReactions
 import com.daniel.reproductor.ui.together.IncomingDedicationOverlay
 import com.daniel.reproductor.ui.together.MilestoneOverlay
+import com.daniel.reproductor.ui.together.StreakMoment
+import com.daniel.reproductor.ui.together.StreakOverlay
 import com.daniel.reproductor.ui.together.ListenBanner
 import com.daniel.reproductor.ui.together.TogetherScreen
 import com.daniel.reproductor.ui.together.TogetherViewModel
@@ -198,6 +200,32 @@ internal fun AppRoot(
     var celebrated by remember { mutableStateOf(DuoPrefs.celebrated(app)) }
     val milestone = DuoDates.parse(duo?.origin?.startedOn)?.let { DuoDates.milestoneOn(it, today) }
         ?.takeIf { celebrated != "$today:${it.key}" }
+    // La racha a pantalla completa: en peligro, rota o salvada (cada una se ve una vez en este celular)
+    var streakSeen by remember { mutableStateOf(0) } // cambia para volver a leer lo visto
+    var liveSaved by remember { mutableStateOf(false) }
+    val streak = duo?.streak
+    val streakMoment = remember(streak, streakSeen, liveSaved) {
+        when {
+            streak == null -> null
+            streak.rescue != null && DuoPrefs.seen(app, "risk") != streak.rescue.day ->
+                StreakMoment.AtRisk(streak)
+            streak.savedDay == streak.today && (liveSaved || DuoPrefs.seen(app, "saved") != streak.savedDay) ->
+                StreakMoment.Saved(streak.count)
+            streak.broken != null && streak.broken.lost > 0 && DuoPrefs.seen(app, "broken") != streak.broken.on &&
+                runCatching { !LocalDate.parse(streak.broken.on).isBefore(today.minusDays(2)) }.getOrDefault(false) ->
+                StreakMoment.Broken(streak.broken, streak.best)
+            else -> null
+        }
+    }
+    fun markStreakSeen(moment: StreakMoment) {
+        val s = streak ?: return
+        when (moment) {
+            is StreakMoment.AtRisk -> s.rescue?.let { DuoPrefs.setSeen(app, "risk", it.day) }
+            is StreakMoment.Saved -> { DuoPrefs.setSeen(app, "saved", s.today); liveSaved = false }
+            is StreakMoment.Broken -> s.broken?.let { DuoPrefs.setSeen(app, "broken", it.on) }
+        }
+        streakSeen++
+    }
     val styleId by lib.style.collectAsStateWithLifecycle()
     val savedIds by lib.savedIds.collectAsStateWithLifecycle()
     val saveSheet = rememberSaveToPlaylistState()
@@ -212,6 +240,7 @@ internal fun AppRoot(
                 is HubEvent.Message -> snackbar.showSnackbar(e.text)
                 is HubEvent.IncomingDedication -> if (e.dedication.autoplay) liveDedicationId = e.dedication.id
                 is HubEvent.LiveReaction -> Unit
+                HubEvent.StreakSaved -> liveSaved = true
             }
         }
     }
@@ -344,7 +373,17 @@ internal fun AppRoot(
             AccountScreen(together, onBack = { showAccount = false })
         }
 
-        if (milestone != null && pending == null && partner?.linked == true) {
+        val moment = streakMoment
+        if (moment != null && pending == null && partner?.linked == true) {
+            StreakOverlay(
+                moment = moment,
+                partner = partnerName,
+                onChoose = { type -> together.chooseRescue(type); markStreakSeen(moment) },
+                onGiveUp = { together.giveUpRescue(); markStreakSeen(moment) },
+                onRetie = { markStreakSeen(moment); goTo(Tab.TOGETHER) },
+                onDismiss = { markStreakSeen(moment) },
+            )
+        } else if (milestone != null && pending == null && partner?.linked == true) {
             MilestoneOverlay(
                 milestone = milestone,
                 me = account?.displayName.orEmpty().ifBlank { "Tú" },
