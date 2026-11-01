@@ -76,6 +76,59 @@ data class MissionState(val mine: Boolean, val partner: Boolean) {
     val done get() = mine && partner
 }
 
+/**
+ * Términos de privacidad de Minu: [mine] y [partner] dicen quién aceptó la versión vigente. La mascota
+ * solo funciona cuando [accepted] (los dos). [update] = ya había aceptado una versión anterior.
+ */
+data class MinuTerms(val version: Int, val mine: Boolean, val partner: Boolean, val update: Boolean) {
+    val accepted get() = mine && partner
+}
+
+/** Una propuesta de cambio (nombre o mascota) que el otro debe aceptar. */
+data class PetProposal(val value: String, val mine: Boolean, val byName: String)
+
+/** Las cuatro mascotas posibles; [id] es el que usa el servidor. */
+enum class PetSpecies(val id: String, val label: String) {
+    YARN("yarn", "Ovillo"), CAT("cat", "Gatito"), BUNNY("bunny", "Conejito"), DOG("dog", "Perrito");
+
+    companion object {
+        fun from(id: String?) = entries.firstOrNull { it.id == id } ?: YARN
+    }
+}
+
+/** Ánimo según la energía de la pareja. Minu nunca enferma ni muere. */
+enum class PetMood(val id: String) {
+    RADIANT("radiant"), HAPPY("happy"), SLEEPY("sleepy"), MISSING("missing");
+
+    companion object {
+        fun from(id: String?) = entries.firstOrNull { it.id == id } ?: HAPPY
+    }
+}
+
+/** Etapas por meses en Minu; nunca retroceden. */
+enum class PetStage(val id: String, val label: String) {
+    BABY("baby", "Cría"), YOUNG("young", "Joven"), ADULT("adult", "Adulto"), WISE("wise", "Sabio");
+
+    companion object {
+        fun from(id: String?) = entries.firstOrNull { it.id == id } ?: BABY
+    }
+}
+
+/** La mascota de la pareja. La energía es de los dos: nunca dice quién aportó cuánto. */
+data class MinuPet(
+    val species: PetSpecies,
+    val name: String,
+    val energy: Int,
+    val mood: PetMood,
+    val stage: PetStage,
+    val months: Int,
+    val nextStageInMonths: Int?,
+    val nameProposal: PetProposal?,
+    val speciesProposal: PetProposal?,
+)
+
+data class MinuInfo(val terms: MinuTerms, val pet: MinuPet?)
+
 data class DuoInfo(
     val origin: DuoOrigin?,
     val dedicationCount: Int,
@@ -86,6 +139,8 @@ data class DuoInfo(
     val letter: SealedLetter? = null,
     /** Desde cuándo usan Minu juntos (AAAA-MM-DD): las Cintas del mes empiezan aquí. */
     val joinedOn: String? = null,
+    /** Minu, la mascota (null si el servidor aún no la conoce). */
+    val minu: MinuInfo? = null,
 )
 
 /**
@@ -274,6 +329,18 @@ class CloudApi(baseClient: OkHttpClient, private val session: Session) {
     suspend fun markMission(month: Int, done: Boolean): DuoInfo? =
         parseDuo(call("POST", "/duo/missions/$month", JSONObject().put("done", done)))
 
+    // ---------- Minu, la mascota ----------
+
+    suspend fun acceptMinuTerms(): DuoInfo? = parseDuo(call("POST", "/duo/terms/accept", JSONObject()))
+
+    /** [kind] "name" o "species". */
+    suspend fun proposePet(kind: String, value: String): DuoInfo? =
+        parseDuo(call("POST", "/duo/pet/proposals", JSONObject().put("kind", kind).put("value", value)))
+
+    suspend fun acceptPetProposal(kind: String): DuoInfo? = parseDuo(call("POST", "/duo/pet/proposals/$kind/accept", JSONObject()))
+    suspend fun dropPetProposal(kind: String): DuoInfo? = parseDuo(call("DELETE", "/duo/pet/proposals/$kind"))
+    suspend fun eraseMinuData(): DuoInfo? = parseDuo(call("DELETE", "/duo/minu/data"))
+
     private suspend fun call(method: String, path: String, body: JSONObject? = null, auth: Boolean = true): JSONObject =
         withContext(Dispatchers.IO) {
             val token = session.account.value?.token
@@ -358,7 +425,34 @@ class CloudApi(baseClient: OkHttpClient, private val session: Session) {
                     SealedLetter(it.getInt("year"), it.optString("opensOn"), it.optStringOrNull("mine"), it.optBoolean("partnerWrote"))
                 },
                 joinedOn = json.optStringOrNull("joinedOn"),
+                minu = json.optJSONObject("minu")?.let(::parseMinu),
             )
+        }
+
+        fun parseMinu(json: JSONObject): MinuInfo {
+            val t = json.optJSONObject("terms")
+            val terms = MinuTerms(
+                t?.optInt("version") ?: 0, t?.optBoolean("mine") ?: false,
+                t?.optBoolean("partner") ?: false, t?.optBoolean("update") ?: false,
+            )
+            val pet = json.optJSONObject("pet")?.let { p ->
+                val proposals = p.optJSONObject("proposals")
+                fun proposal(kind: String) = proposals?.optJSONObject(kind)?.let {
+                    PetProposal(it.optString("value"), it.optBoolean("mine"), it.optString("byName"))
+                }
+                MinuPet(
+                    species = PetSpecies.from(p.optString("species")),
+                    name = p.optString("name").ifBlank { "Minu" },
+                    energy = p.optInt("energy"),
+                    mood = PetMood.from(p.optString("mood")),
+                    stage = PetStage.from(p.optString("stage")),
+                    months = p.optInt("months"),
+                    nextStageInMonths = if (p.isNull("nextStageInMonths")) null else p.optInt("nextStageInMonths"),
+                    nameProposal = proposal("name"),
+                    speciesProposal = proposal("species"),
+                )
+            }
+            return MinuInfo(terms, pet)
         }
 
         private fun objects(array: JSONArray?): List<JSONObject> =

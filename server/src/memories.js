@@ -1,5 +1,6 @@
 import { capsules, cleanSong, coupleKey, couples, dedications } from './db.js';
 import { addDays, completeRescue, localDay, refreshStreak } from './duo.js';
+import { recordPetEvent } from './pet.js';
 
 /** Banco de preguntas de la cápsula: cada rescate toma tres que la pareja no haya respondido. */
 export const CAPSULE_PROMPTS = [
@@ -108,6 +109,7 @@ export async function answerCapsule(db, me, body, now = new Date()) {
     await capsules(db).updateOne({ _id: capsule._id }, { $set: { openedAt: now } });
     updated.openedAt = now;
     await couples(db).updateOne({ _id: key }, { $set: { streak: completeRescue(couple.streak) } });
+    await recordPetEvent(db, key, 'rescue', { day: today, now });
   }
   return { capsule: updated, opened: both };
 }

@@ -57,6 +57,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -105,6 +106,11 @@ import com.daniel.reproductor.ui.library.rememberSaveToPlaylistState
 import com.daniel.reproductor.ui.player.PlayerState
 import com.daniel.reproductor.ui.profile.ProfileButton
 import com.daniel.reproductor.ui.theme.LocalAppStyle
+import com.daniel.reproductor.ui.together.minu.MinuEntry
+import com.daniel.reproductor.ui.together.minu.MinuHouse
+import com.daniel.reproductor.ui.together.minu.MinuHouseActions
+import com.daniel.reproductor.ui.together.minu.MinuTermsSheet
+import com.daniel.reproductor.ui.together.minu.MinuVoice
 import kotlinx.coroutines.launch
 import java.text.DateFormat
 import java.time.LocalDate
@@ -132,6 +138,9 @@ fun TogetherScreen(vm: TogetherViewModel, lib: LibraryViewModel, player: PlayerS
     val openTape by vm.openTape.collectAsStateWithLifecycle()
     val anniversaryOpen by vm.anniversaryOpen.collectAsStateWithLifecycle()
     val duo by vm.duo.collectAsStateWithLifecycle()
+    var showMinuTerms by rememberSaveable { mutableStateOf(false) }
+    var showMinuHouse by rememberSaveable { mutableStateOf(false) }
+    var minuTermsOffered by rememberSaveable { mutableStateOf(false) }
     val saveSheet = rememberSaveToPlaylistState()
     val save = player?.takeIf { it.hasMedia }?.let { p ->
         SaveAction(saved = p.currentVideoId in savedIds) { saveSheet.open(p.currentSong()) }
@@ -141,6 +150,15 @@ fun TogetherScreen(vm: TogetherViewModel, lib: LibraryViewModel, player: PlayerS
     val status = partner
     val myName = user?.displayName?.ifBlank { user.username } ?: "Tú"
     val linkedPartner = status?.partner?.takeIf { user != null && status.linked }
+    val minu = duo?.minu?.takeIf { linkedPartner != null }
+
+    // Al vincularse (o si aún no lo has hecho) Minu se presenta una vez con sus términos
+    LaunchedEffect(minu?.terms?.mine) {
+        if (minu != null && !minu.terms.mine && !minuTermsOffered) {
+            minuTermsOffered = true
+            showMinuTerms = true
+        }
+    }
 
     LazyColumn(
         Modifier.fillMaxSize(),
@@ -170,9 +188,14 @@ fun TogetherScreen(vm: TogetherViewModel, lib: LibraryViewModel, player: PlayerS
                 onHeartbeat = { vm.sendHeartbeats(it) },
                 onHug = { vm.sendLiveReaction(TogetherViewModel.HUG) },
                 streak = duo?.streak?.takeIf { linkedPartner != null },
+                pet = minu?.pet,
+                onPetTap = { showMinuHouse = true },
             )
         }
         if (linkedPartner != null) {
+            minu?.let { m ->
+                item { MinuEntry(m, linkedPartner.displayName, onOpenTerms = { showMinuTerms = true }, onOpenHouse = { showMinuHouse = true }) }
+            }
             item { OriginLine(duo, onEdit = { editingOrigin = true }) }
             duo?.anniversaries?.lastOrNull { !it.opened && !it.beforeMinu }?.let { gift ->
                 item { GiftCard(gift.years, linkedPartner.displayName) { vm.showAnniversary(gift.years) } }
@@ -267,6 +290,28 @@ fun TogetherScreen(vm: TogetherViewModel, lib: LibraryViewModel, player: PlayerS
         AnniversaryScreen(vm, years, myName, partner?.partner?.displayName.orEmpty(), onDismiss = { vm.showAnniversary(null) })
     }
 
+    if (showMinuTerms && minu != null && !minu.terms.mine) {
+        MinuTermsSheet(
+            partnerName = linkedPartner?.displayName.orEmpty(),
+            update = minu.terms.update,
+            onAccept = { vm.acceptMinuTerms(); showMinuTerms = false },
+            onDismiss = { showMinuTerms = false },
+        )
+    }
+    val pet = minu?.pet
+    if (showMinuHouse && pet != null) {
+        MinuHouse(
+            pet, linkedPartner?.displayName.orEmpty(),
+            MinuHouseActions(
+                propose = { kind, value -> vm.proposePet(kind, value) },
+                accept = { vm.acceptPetProposal(it) },
+                drop = { vm.dropPetProposal(it) },
+                erase = { vm.eraseMinuData() },
+            ),
+            onDismiss = { showMinuHouse = false },
+        )
+    }
+
     if (editingOrigin) {
         OriginSheet(
             origin = duo?.origin,
@@ -281,7 +326,12 @@ fun TogetherScreen(vm: TogetherViewModel, lib: LibraryViewModel, player: PlayerS
         AlertDialog(
             onDismissRequest = { confirmUnlink = false },
             title = { Text("¿Cortar el hilo?") },
-            text = { Text("Dejarán de compartir dedicatorias, latidos y la música en vivo. Pueden volver a vincularse cuando quieran.") },
+            text = {
+                Text(
+                    "Dejarán de compartir dedicatorias, latidos y la música en vivo. Pueden volver a vincularse cuando quieran." +
+                        (pet?.let { "\n\n${it.name}: “${MinuVoice.FAREWELL}”" } ?: ""),
+                )
+            },
             confirmButton = {
                 TextButton(onClick = { confirmUnlink = false; vm.unlinkPartner() }) { Text("Desvincular") }
             },

@@ -388,6 +388,7 @@ internal fun AppRoot(
                 onGiveUp = { together.giveUpRescue(); markStreakSeen(moment) },
                 onRetie = { markStreakSeen(moment); goTo(Tab.TOGETHER) },
                 onDismiss = { markStreakSeen(moment) },
+                pet = duo?.minu?.pet,
             )
         } else if (milestone is DuoMilestone.Anniversary && pending == null && partner?.linked == true) {
             // El aniversario no se celebra aquí: es un regalo envuelto en Dúo que se abre con el abrazo de los dos
@@ -420,6 +421,7 @@ internal fun AppRoot(
                     together.requestTape(month)
                     goTo(Tab.TOGETHER)
                 },
+                pet = duo?.minu?.pet,
             )
         }
 
@@ -430,6 +432,7 @@ internal fun AppRoot(
                 onListen = { together.play(d) },
                 onLater = { together.markSeen(d) },
                 onReact = { emoji -> together.react(d, emoji) },
+                pet = duo?.minu?.pet,
             )
         }
 

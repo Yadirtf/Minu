@@ -73,6 +73,8 @@ import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.daniel.reproductor.cloud.DuoStreak
+import com.daniel.reproductor.cloud.MinuPet
+import com.daniel.reproductor.ui.together.minu.MinuCreature
 import com.daniel.reproductor.cloud.HubEvent
 import com.daniel.reproductor.cloud.PartnerInfo
 import com.daniel.reproductor.ui.theme.LocalAppStyle
@@ -104,6 +106,8 @@ private class Burst(val id: Long, val at: Offset)
  * - Toca el hilo: vibra como una cuerda.
  * - Cada reacción viaja por el hilo, de quien la manda a quien la recibe.
  *
+ * - Minu ([pet]) se sienta sobre el hilo; tocarlo abre su casita. Salta cuando algo viaja por el hilo.
+ *
  * Sin pareja ([partner] null) el hilo queda punteado esperando a alguien.
  */
 @Composable
@@ -116,6 +120,8 @@ fun DuoHero(
     onHug: () -> Unit,
     modifier: Modifier = Modifier,
     streak: DuoStreak? = null,
+    pet: MinuPet? = null,
+    onPetTap: () -> Unit = {},
 ) {
     val c = MaterialTheme.colorScheme
     val style = LocalAppStyle.current
@@ -125,6 +131,9 @@ fun DuoHero(
     val linked = partner != null
     val heartbeat by rememberUpdatedState(onHeartbeat)
     val hug by rememberUpdatedState(onHug)
+    val petTap by rememberUpdatedState(onPetTap)
+    val hasPet = linked && pet != null
+    val hasPetNow by rememberUpdatedState(hasPet)
 
     val orbR = with(density) { 38.dp.toPx() }
     val sagPx = with(density) { 26.dp.toPx() }
@@ -135,6 +144,9 @@ fun DuoHero(
     val idlePx = with(density) { 1.5.dp.toPx() }
     val labelGap = with(density) { 44.dp.toPx() }
     val dotGap = with(density) { 18.dp.toPx() }
+    val petSize = 60.dp
+    val petPx = with(density) { petSize.toPx() }
+    val petHop = remember { Animatable(0f) }
 
     var box by remember { mutableStateOf(IntSize.Zero) }
     var pull by remember { mutableStateOf(Offset.Zero) } // cuánto arrastraste tu burbuja
@@ -176,6 +188,12 @@ fun DuoHero(
         val a = myPos(); val b = partnerPos()
         return threadPoint(a, b, 0.5f, sag(a, b), wave(), phase)
     }
+    /** Donde se sienta Minu: sobre el hilo, entre tu burbuja y el corazón. */
+    fun petSeat(): Offset {
+        val a = myPos(); val b = partnerPos()
+        return threadPoint(a, b, 0.33f, sag(a, b), wave(), phase)
+    }
+    fun petCenter() = petSeat() - Offset(0f, petPx * 0.45f)
     fun twang(strength: Float = 1f) = scope.launch {
         pluck.snapTo(pluckPx * strength)
         pluck.animateTo(0f, spring(dampingRatio = 0.12f, stiffness = Spring.StiffnessMediumLow))
@@ -189,6 +207,12 @@ fun DuoHero(
     LaunchedEffect(events, linked) {
         if (!linked) return@LaunchedEffect
         events.collect { e ->
+            // Minu salta de gusto con cada cosa que viaja por el hilo
+            if (hasPetNow && (e is HubEvent.LiveReaction || e is HubEvent.IncomingDedication)) launch {
+                petHop.snapTo(0f)
+                petHop.animateTo(1f, tween(650, easing = FastOutSlowInEasing))
+                petHop.snapTo(0f)
+            }
             if (e !is HubEvent.LiveReaction) return@collect
             flights += Flight(System.nanoTime(), e.emoji, e.fromMe)
             if (!e.fromMe && e.emoji == TogetherViewModel.HUG) launch {
@@ -213,11 +237,21 @@ fun DuoHero(
             .clip(style.cardShape)
             .background(Brush.verticalGradient(listOf(THREAD_RED.copy(alpha = 0.16f), c.primary.copy(alpha = 0.10f), c.surfaceContainer)))
             .onSizeChanged { box = it }
-            .pointerInput(linked) {
+            .pointerInput(linked, hasPet) {
                 awaitEachGesture {
                     val down = awaitFirstDown()
                     val at = down.position
                     when {
+                        // Minu: tocarlo abre su casita
+                        hasPet && (at - petCenter()).getDistance() < petPx * 0.55f -> {
+                            down.consume()
+                            haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                            while (true) {
+                                val change = awaitPointerEvent().changes.firstOrNull { it.id == down.id } ?: break
+                                change.consume()
+                                if (!change.pressed) { petTap(); break }
+                            }
+                        }
                         // Tu burbuja: se arrastra; si toca la suya, es un abrazo
                         linked && (at - myPos()).getDistance() < orbR * 1.3f -> {
                             down.consume()
@@ -389,6 +423,21 @@ fun DuoHero(
                     partnerPos() + Offset(0f, labelGap + dotGap)
                 }
             }
+        }
+
+        // Minu sentado sobre el hilo
+        if (hasPet && pet != null && box != IntSize.Zero) {
+            Box(
+                Modifier
+                    .offset {
+                        val seat = petSeat()
+                        IntOffset((seat.x - petPx / 2f).roundToInt(), (seat.y - petPx * 0.92f).roundToInt())
+                    }
+                    .size(petSize),
+            ) {
+                MinuCreature(pet.species, pet.mood, pet.stage, Modifier.size(petSize), hop = petHop.value)
+            }
+            Label(pet.name, 11, c.onSurface) { petSeat() + Offset(0f, dotGap * 0.9f) }
         }
 
         // Destellos de corazones (abrazos y latidos)

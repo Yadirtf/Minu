@@ -59,6 +59,10 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.daniel.reproductor.cloud.DuoStreak
+import com.daniel.reproductor.cloud.MinuPet
+import com.daniel.reproductor.cloud.PetMood
+import com.daniel.reproductor.ui.together.minu.MinuCompanion
+import com.daniel.reproductor.ui.together.minu.MinuVoice
 import com.daniel.reproductor.cloud.StreakBroken
 import com.daniel.reproductor.ui.components.PillButton
 import kotlinx.coroutines.delay
@@ -98,6 +102,7 @@ fun StreakOverlay(
     onGiveUp: () -> Unit,
     onRetie: () -> Unit,
     onDismiss: () -> Unit,
+    pet: MinuPet? = null,
 ) {
     val haptics = LocalHapticFeedback.current
     var time by remember { mutableFloatStateOf(0f) }
@@ -135,6 +140,19 @@ fun StreakOverlay(
             is StreakMoment.AtRisk -> AtRiskContent(moment.streak, partner, time, onChoose, onGiveUp, onDismiss)
             is StreakMoment.Broken -> BrokenContent(moment, time, onRetie, onDismiss)
             is StreakMoment.Saved -> SavedContent(moment.count, time, onDismiss)
+        }
+        // Minu acompaña: sostiene el hilo, consuela o celebra (nunca regaña)
+        pet?.let {
+            val (line, mood) = when (moment) {
+                is StreakMoment.AtRisk -> MinuVoice.AT_RISK to PetMood.SLEEPY
+                is StreakMoment.Broken -> MinuVoice.BROKEN to PetMood.MISSING
+                is StreakMoment.Saved -> MinuVoice.SAVED to PetMood.RADIANT
+            }
+            MinuCompanion(
+                it, line, mood = mood,
+                modifier = Modifier.align(Alignment.TopStart).systemBarsPadding().padding(12.dp)
+                    .graphicsLayer { alpha = fade(time, 0.4f) },
+            )
         }
     }
 }

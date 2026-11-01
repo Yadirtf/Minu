@@ -505,3 +505,82 @@ test('aniversario: los que vivieron antes de llegar a Minu se marcan y no se abr
     fakeNow = null;
   }
 });
+
+test('Minu: nace cuando los dos aceptan los términos, se alimenta de dedicatorias y se renombra de común acuerdo', async () => {
+  const a = (await register('minu_paris')).body.token;
+  const b = (await register('minu_helena')).body.token;
+  await api('POST', '/partner/request', { username: 'minu_helena' }, a);
+  await api('POST', '/partner/accept', null, b);
+  const song = { videoId: 'bbbbbbbbbbb', title: 'Para ti', uploader: 'X', durationSec: 200, thumbnailUrl: '' };
+  try {
+    fakeNow = new Date('2026-11-01T15:00:00Z');
+    let duo = (await api('GET', '/duo', null, a)).body;
+    assert.deepEqual(duo.minu.terms, { version: 1, mine: false, partner: false, accepted: false, update: false });
+    assert.equal(duo.minu.pet, null);
+    // Sin aceptar, la mascota no responde
+    assert.equal((await api('POST', '/duo/pet/proposals', { kind: 'name', value: 'Pelusa' }, a)).status, 403);
+
+    duo = (await api('POST', '/duo/terms/accept', null, a)).body;
+    assert.equal(duo.minu.terms.mine, true);
+    assert.equal(duo.minu.terms.partner, false);
+    assert.equal(duo.minu.pet, null); // falta la otra mitad
+    duo = (await api('GET', '/duo', null, b)).body;
+    assert.equal(duo.minu.terms.partner, true);
+
+    duo = (await api('POST', '/duo/terms/accept', null, b)).body;
+    assert.equal(duo.minu.terms.accepted, true);
+    assert.equal(duo.minu.pet.name, 'Minu');
+    assert.equal(duo.minu.pet.species, 'yarn');
+    assert.equal(duo.minu.pet.stage, 'baby');
+    const born = duo.minu.pet.energy;
+    assert.equal(born, 50);
+    // Aceptar de nuevo no hace nacer otra vez a Minu
+    await api('POST', '/duo/terms/accept', null, b);
+
+    // Dedicar alimenta (una vez por persona al día) y nunca dice quién aportó
+    await api('POST', '/dedications', { song }, a);
+    await api('POST', '/dedications', { song }, a);
+    duo = (await api('GET', '/duo', null, b)).body;
+    assert.equal(duo.minu.pet.energy, born + 10);
+    await api('POST', '/dedications', { song }, b);
+    duo = (await api('GET', '/duo', null, a)).body;
+    assert.equal(duo.minu.pet.energy, born + 20);
+    assert.equal(duo.minu.pet.mine, undefined);
+
+    // Renombrar: uno propone, el otro acepta
+    assert.equal((await api('POST', '/duo/pet/proposals', { kind: 'name', value: '<b>' }, a)).status, 400);
+    duo = (await api('POST', '/duo/pet/proposals', { kind: 'name', value: '  Pelusa  ' }, a)).body;
+    assert.deepEqual(duo.minu.pet.proposals.name, { value: 'Pelusa', mine: true, byName: 'minu_paris' });
+    assert.equal((await api('POST', '/duo/pet/proposals/name/accept', null, a)).status, 409); // no la propia
+    duo = (await api('POST', '/duo/pet/proposals/name/accept', null, b)).body;
+    assert.equal(duo.minu.pet.name, 'Pelusa');
+    assert.equal(duo.minu.pet.proposals.name, undefined);
+
+    // Cambiar de mascota conserva la energía; también se puede rechazar
+    await api('POST', '/duo/pet/proposals', { kind: 'species', value: 'cat' }, b);
+    duo = (await api('DELETE', '/duo/pet/proposals/species', null, a)).body;
+    assert.equal(duo.minu.pet.species, 'yarn');
+    await api('POST', '/duo/pet/proposals', { kind: 'species', value: 'dog' }, b);
+    duo = (await api('POST', '/duo/pet/proposals/species/accept', null, a)).body;
+    assert.equal(duo.minu.pet.species, 'dog');
+    assert.equal(duo.minu.pet.energy, born + 20);
+    assert.equal((await api('POST', '/duo/pet/proposals', { kind: 'species', value: 'dragon' }, a)).status, 400);
+
+    // Un mes después crece y la energía bajó (sin morir)
+    fakeNow = new Date('2026-11-26T15:00:00Z');
+    duo = (await api('GET', '/duo', null, a)).body;
+    assert.ok(duo.minu.pet.energy < born, `energía ${duo.minu.pet.energy}`);
+    assert.ok(['sleepy', 'missing'].includes(duo.minu.pet.mood));
+
+    // Borrar mis datos: Minu se pausa hasta que vuelva a aceptar; la mascota se queda
+    duo = (await api('DELETE', '/duo/minu/data', null, a)).body;
+    assert.equal(duo.minu.terms.mine, false);
+    assert.equal(duo.minu.pet, null);
+    assert.equal((await api('POST', '/duo/pet/proposals', { kind: 'name', value: 'Otra' }, b)).status, 403);
+    duo = (await api('POST', '/duo/terms/accept', null, a)).body;
+    assert.equal(duo.minu.pet.name, 'Pelusa');
+    assert.equal(duo.minu.pet.species, 'dog');
+  } finally {
+    fakeNow = null;
+  }
+});

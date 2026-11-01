@@ -213,6 +213,16 @@ class TogetherViewModel(
     fun voteSong(years: Int, videoId: String) = action { _anniversary.value = api.voteSong(years, videoId) }
     fun writeLetter(text: String) = action("Carta sellada hasta su próximo aniversario 💌") { hub.writeLetter(text) }
 
+    // ---------- Minu, la mascota ----------
+
+    fun acceptMinuTerms() = action { hub.acceptMinuTerms() }
+
+    /** Proponer otro nombre ([kind] "name") u otra mascota ("species"); se aplica cuando tu pareja acepta. */
+    fun proposePet(kind: String, value: String) = action("Listo, se lo propuse a tu pareja 💌") { hub.proposePet(kind, value) }
+    fun acceptPetProposal(kind: String) = action { hub.acceptPetProposal(kind) }
+    fun dropPetProposal(kind: String) = action { hub.dropPetProposal(kind) }
+    fun eraseMinuData() = action("Borré lo que me contaste. Aquí estaré si vuelves 🧶") { hub.eraseMinuData() }
+
     fun playAll(songs: List<Song>) = viewModelScope.launch { runCatching { hub.playSongs(songs) } }
     fun giveUpRescue() = action { hub.giveUpRescue() }
 

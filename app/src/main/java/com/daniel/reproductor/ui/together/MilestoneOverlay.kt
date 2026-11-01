@@ -31,6 +31,10 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.withFrameMillis
 import androidx.compose.ui.Alignment
+import com.daniel.reproductor.cloud.MinuPet
+import com.daniel.reproductor.cloud.PetMood
+import com.daniel.reproductor.ui.together.minu.MinuCompanion
+import com.daniel.reproductor.ui.together.minu.MinuVoice
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
@@ -71,6 +75,7 @@ fun MilestoneOverlay(
     onPlay: (Song) -> Unit,
     onDismiss: () -> Unit,
     onOpenTape: (Int) -> Unit = {},
+    pet: MinuPet? = null,
 ) {
     val haptics = LocalHapticFeedback.current
     val anniversary = milestone is DuoMilestone.Anniversary
@@ -105,6 +110,12 @@ fun MilestoneOverlay(
         Modifier.fillMaxSize().background(Brush.verticalGradient(NIGHT))
             .clickable(remember { MutableInteractionSource() }, indication = null) {},
     ) {
+        pet?.let {
+            MinuCompanion(
+                it, if (anniversary) MinuVoice.ANNIVERSARY else MinuVoice.MONTHSARY, mood = PetMood.RADIANT,
+                modifier = Modifier.align(Alignment.TopStart).systemBarsPadding().padding(12.dp).graphicsLayer { alpha = textAlpha },
+            )
+        }
         Canvas(Modifier.fillMaxSize()) {
             stars.forEach { (x, y, o) ->
                 val twinkle = (sin(time * 1.6f + o) + 1f) / 2f

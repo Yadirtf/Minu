@@ -11,6 +11,8 @@ export const streakDays = (db) => db.collection('streak_days');
 export const capsules = (db) => db.collection('capsules');
 /** Cartas para el próximo aniversario (_id = "<pareja>:<año>:<autor>"): selladas hasta que lo abren. */
 export const letters = (db) => db.collection('letters');
+/** Gestos que alimentan a Minu (_id determinista = el mismo gesto cuenta una vez). */
+export const petEvents = (db) => db.collection('pet_events');
 
 /** Llave de la pareja: los dos ids ordenados, así sobrevive si se desvinculan y vuelven. */
 export const coupleKey = (a, b) => [String(a), String(b)].sort().join('_');
@@ -25,6 +27,7 @@ export async function ensureIndexes(db) {
   await streakDays(db).createIndex({ couple: 1, day: 1 });
   await capsules(db).createIndex({ couple: 1, day: -1 });
   await letters(db).createIndex({ couple: 1, year: 1 });
+  await petEvents(db).createIndex({ couple: 1, day: 1 });
 }
 
 export function toId(value) {
