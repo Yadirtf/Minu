@@ -136,6 +136,9 @@ private fun ComponentActivity.handleIntent(intent: Intent?) {
     if (intent?.getBooleanExtra(Push.EXTRA_LISTEN_INVITE, false) == true) {
         (application as ReproductorApp).partnerHub.onListenInviteNotification()
     }
+    if (intent?.getBooleanExtra(Push.EXTRA_OPEN_DUO, false) == true) {
+        (application as ReproductorApp).partnerHub.requestOpenDuo()
+    }
 }
 
 /** Íconos de la barra de estado claros u oscuros según el estilo. */
@@ -258,6 +261,18 @@ internal fun AppRoot(
         searchInPlaylist = NONE
         scope.launch { pager.animateScrollToPage(target.ordinal) }
     }
+    // Una notificación de Minu lleva directo a Dúo
+    val openDuo by hub.openDuo.collectAsStateWithLifecycle()
+    LaunchedEffect(openDuo) {
+        if (openDuo) {
+            goTo(Tab.TOGETHER)
+            hub.consumeOpenDuo()
+        }
+    }
+    // Puntito en Dúo: Minu espera que aceptes despertarle, o tu pareja te propuso un cambio
+    val minuNeedsYou = duo?.minu?.takeIf { partner?.linked == true }?.let { m ->
+        !m.terms.mine || listOfNotNull(m.pet?.nameProposal, m.pet?.speciesProposal).any { !it.mine }
+    } == true
     fun closeDrawerThen(action: () -> Unit) {
         action()
         scope.launch { drawer.close() }
@@ -336,7 +351,7 @@ internal fun AppRoot(
                     ListenBanner(listen, partnerName) { goTo(Tab.TOGETHER) }
                 }
                 if (hasMedia) MiniPlayer(player!!, onOpen = { fullPlayer = true })
-                StyledBottomBar(selected = tab, onSelect = ::goTo)
+                StyledBottomBar(selected = tab, onSelect = ::goTo, badges = if (minuNeedsYou) setOf(Tab.TOGETHER) else emptySet())
             }
         }
 

@@ -40,8 +40,10 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.dp
@@ -58,18 +60,23 @@ enum class Tab(val label: String, val icon: ImageVector, val selectedIcon: Image
 /** La pestaña con la que abre la app. */
 val START_TAB = Tab.SEARCH
 
-/** Barra inferior con Mi música, Álbumes, Buscar y Dúo, dibujada distinto en cada estilo. */
+/**
+ * Barra inferior con Mi música, Álbumes, Buscar y Dúo, dibujada distinto en cada estilo. Las pestañas
+ * en [badges] llevan un puntito: algo nuevo las espera (por ejemplo, Minu por despertar en Dúo).
+ */
 @Composable
-fun StyledBottomBar(selected: Tab, onSelect: (Tab) -> Unit) {
+fun StyledBottomBar(selected: Tab, onSelect: (Tab) -> Unit, badges: Set<Tab> = emptySet()) {
     val style = LocalAppStyle.current
     val c = MaterialTheme.colorScheme
+    val dot = Modifier.badgeDot(c.error)
+    fun Modifier.badge(tab: Tab) = if (tab in badges) then(dot) else this
     when (style.id) {
         StyleId.MATERIAL -> NavigationBar {
             Tab.entries.forEach { tab ->
                 NavigationBarItem(
                     selected = tab == selected,
                     onClick = { onSelect(tab) },
-                    icon = { Icon(if (tab == selected) tab.selectedIcon else tab.icon, null) },
+                    icon = { Icon(if (tab == selected) tab.selectedIcon else tab.icon, null, Modifier.badge(tab)) },
                     label = { Text(tab.label) },
                 )
             }
@@ -89,7 +96,7 @@ fun StyledBottomBar(selected: Tab, onSelect: (Tab) -> Unit) {
                             .padding(horizontal = 16.dp, vertical = 10.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        Icon(if (on) tab.selectedIcon else tab.icon, tab.label, tint = if (on) c.onPrimary else Color.White.copy(alpha = 0.7f))
+                        Icon(if (on) tab.selectedIcon else tab.icon, tab.label, Modifier.badge(tab), tint = if (on) c.onPrimary else Color.White.copy(alpha = 0.7f))
                         if (on) {
                             Spacer(Modifier.width(6.dp))
                             Text(tab.label, color = c.onPrimary, style = MaterialTheme.typography.labelLarge)
@@ -108,7 +115,7 @@ fun StyledBottomBar(selected: Tab, onSelect: (Tab) -> Unit) {
                         style = MaterialTheme.typography.titleMedium,
                         color = if (on) c.onPrimary else c.primary,
                         modifier = Modifier.background(if (on) c.primary else Color.Transparent)
-                            .noRippleClick { onSelect(tab) }.padding(horizontal = 6.dp),
+                            .noRippleClick { onSelect(tab) }.padding(horizontal = 6.dp).badge(tab),
                     )
                 }
             }
@@ -122,7 +129,7 @@ fun StyledBottomBar(selected: Tab, onSelect: (Tab) -> Unit) {
                     horizontalAlignment = Alignment.CenterHorizontally,
                     verticalArrangement = Arrangement.Center,
                 ) {
-                    Icon(if (on) tab.selectedIcon else tab.icon, null, tint = c.background)
+                    Icon(if (on) tab.selectedIcon else tab.icon, null, Modifier.badge(tab), tint = c.background)
                     Text(tab.label.uppercase(), style = MaterialTheme.typography.labelMedium, color = c.background)
                 }
             }
@@ -143,7 +150,7 @@ fun StyledBottomBar(selected: Tab, onSelect: (Tab) -> Unit) {
                         ) {
                             Box(contentAlignment = Alignment.Center) {
                                 if (on && neon) Box(Modifier.size(28.dp).glow(c.primary, 10.dp, 0.45f))
-                                Icon(if (on) tab.selectedIcon else tab.icon, null, tint = tint, modifier = Modifier.scale(scale))
+                                Icon(if (on) tab.selectedIcon else tab.icon, null, tint = tint, modifier = Modifier.scale(scale).badge(tab))
                             }
                             Text(style.label(tab.label), style = MaterialTheme.typography.labelMedium, color = tint)
                             if (!neon) {
@@ -158,6 +165,15 @@ fun StyledBottomBar(selected: Tab, onSelect: (Tab) -> Unit) {
             }
         }
     }
+}
+
+/** Un puntito en la esquina superior derecha, con borde para que se lea sobre cualquier fondo. */
+private fun Modifier.badgeDot(color: Color): Modifier = drawWithContent {
+    drawContent()
+    val r = 4.dp.toPx()
+    val center = Offset(size.width - r / 2, r / 2)
+    drawCircle(Color.White, radius = r + 1.5.dp.toPx(), center = center)
+    drawCircle(color, radius = r, center = center)
 }
 
 @Composable

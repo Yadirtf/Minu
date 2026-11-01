@@ -224,6 +224,13 @@ class PartnerHub(
         send(JSONObject().put("type", "listen.join"))
     }
 
+    private val _openDuo = MutableStateFlow(false)
+    /** Se tocó una notificación que lleva a Dúo (por ejemplo, de Minu): la app abre esa pestaña. */
+    val openDuo: StateFlow<Boolean> = _openDuo.asStateFlow()
+
+    fun requestOpenDuo() { _openDuo.value = true }
+    fun consumeOpenDuo() { _openDuo.value = false }
+
     /** Se tocó la notificación "quiere escuchar música contigo". */
     fun onListenInviteNotification() {
         if (_listen.value.mode == ListenMode.NONE) _listen.value = ListenSession(ListenMode.INVITED)
