@@ -68,6 +68,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
+import com.daniel.reproductor.ui.together.minu.GratitudeJarArt
+import com.daniel.reproductor.ui.together.minu.JarNoteCard
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.CornerRadius
@@ -715,6 +717,13 @@ private fun MonthView(
 ) {
     val tape by vm.mixtape.collectAsStateWithLifecycle()
     LaunchedEffect(t.from, t.to) { vm.loadMixtape(t.from.toString(), t.to.toString()) }
+    // Meses del calendario que toca esta cinta (puede cruzar dos) para traer su frasco de gracias
+    val jarMonths = remember(t.from, t.to) { listOf(t.from, t.to.minusDays(1)).map { it.toString().take(7) }.distinct() }
+    val jars by vm.jars.collectAsStateWithLifecycle()
+    LaunchedEffect(jarMonths) { if (vm.duo.value?.minu?.pet != null) jarMonths.forEach { vm.loadJar(it) } }
+    val jarNotes = jarMonths.flatMap { jars[it].orEmpty() }
+        .filter { it.day >= t.from.toString() && it.day < t.to.toString() }
+        .sortedBy { it.day }
     val inf = rememberInfiniteTransition(label = "carretes")
     val spin by inf.animateFloat(0f, 360f, infiniteRepeatable(tween(2400, easing = LinearEasing)), label = "giro")
     val sway by inf.animateFloat(-1f, 1f, infiniteRepeatable(tween(3000, easing = FastOutSlowInEasing), RepeatMode.Reverse), label = "mecer")
@@ -777,6 +786,25 @@ private fun MonthView(
                 Hint(if (t.recording) "Si el hilo se deshilacha y lo salvan con una cápsula, quedará aquí." else "Este mes no tuvieron que salvar el hilo 💪")
             }
             else -> items(t.capsules, key = { it.day }) { c -> CapsuleRow(c, onCapsule) }
+        }
+
+        // El frasco de "Gracias por..." de estas fechas (cuando Minu ya acompañaba a la pareja)
+        if (jarNotes.isNotEmpty()) {
+            item {
+                Column {
+                    Text("Frasco de gracias", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, modifier = Modifier.padding(top = 16.dp))
+                    HorizontalDivider(Modifier.padding(top = 6.dp))
+                    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 8.dp)) {
+                        GratitudeJarArt(jarNotes.size, Modifier.size(70.dp, 84.dp))
+                        Spacer(Modifier.width(12.dp))
+                        Text(
+                            "${jarNotes.size} gracias que se dijeron estas semanas.",
+                            style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                }
+            }
+            items(jarNotes, key = { "jar${it.day}${it.byMe}" }) { note -> JarNoteCard(note, partnerName) }
         }
 
         if (mix != null && all.isNotEmpty()) {
