@@ -1,3 +1,4 @@
+import { HELP_LINES } from './care.js';
 /**
  * Banco de contenido de Minu: preguntas del día, gestos del Toque y frases de respuesta entusiasta.
  * Vive en el servidor para poder crecer sin publicar otra APK. Cada pregunta tiene un id estable (no se
@@ -266,6 +267,35 @@ export const QUESTION_REACTIONS = [
 ];
 
 /** Lo que la app descarga para tener a mano sin conexión (no incluye las preguntas: serían spoilers). */
+/**
+ * Frases de reparación para el final de la Tregua (intentos de reparación de Gottman): reconocer, bajar la
+ * guardia, volver a empezar. Ninguna pide explicar la pelea.
+ */
+export const REPAIR_PHRASES = [
+  'Tienes razón en una parte',
+  'Empecemos de nuevo',
+  'Te quiero aunque estemos molestos',
+  'Perdón por cómo lo dije',
+  'Lo que sientes me importa',
+  'Somos un equipo',
+  '¿Me das un abrazo?',
+  'Quiero entenderte mejor',
+];
+
+/** Arranques suaves para el Buzón ("siento… cuando… me ayudaría…"): ideas, nunca obligatorias. */
+export const UNSAID_STARTERS = {
+  feel: ['triste', 'sola / solo', 'preocupado/a', 'poco escuchado/a', 'cansado/a', 'inseguro/a'],
+  need: ['que me abraces', 'que hablemos con calma', 'que me avises', 'un rato para los dos', 'que me escuches sin resolver'],
+};
+
 export function contentBundle() {
-  return { version: CONTENT_VERSION, touchKinds: TOUCH_KINDS, cheers: CHEERS, questionReactions: QUESTION_REACTIONS };
+  return {
+    version: CONTENT_VERSION,
+    touchKinds: TOUCH_KINDS,
+    cheers: CHEERS,
+    questionReactions: QUESTION_REACTIONS,
+    repairs: REPAIR_PHRASES,
+    unsaidStarters: UNSAID_STARTERS,
+    help: HELP_LINES,
+  };
 }
