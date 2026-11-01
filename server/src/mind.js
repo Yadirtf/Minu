@@ -221,6 +221,12 @@ export async function mindIdle() {
   await Promise.allSettled([...inFlight.values()]);
 }
 
+/** Pide un borrador al redactor; acepta redactores simples que solo tienen write(). */
+async function draftWith(writer, prompt) {
+  if (typeof writer.draft === 'function') return writer.draft(prompt);
+  return { text: await writer.write(prompt), error: null };
+}
+
 /**
  * Redacta el mensaje del día de la pareja: hasta ATTEMPTS_PER_DAY intentos, cada uno revisado por las
  * barandas. El primero que pasa queda para los dos. Devuelve true si quedó un mensaje.
@@ -235,7 +241,9 @@ export async function composeLine(db, writer, { couple, today, joinedOn, pet, ad
     const attempt = doc?.attempts ?? 0;
     if (attempt >= ATTEMPTS_PER_DAY) return false;
     const kind = pickKind(`${couple._id}:${today}:${attempt}`, pet?.mood);
-    const raw = await writer.write(buildPrompt({ pet, facts, situation, kind }));
+    const { text: raw, error } = await draftWith(writer, buildPrompt({ pet, facts, situation, kind }));
+    // Si el proveedor pidió una pausa no se gasta un intento: la próxima vez que abran Dúo se vuelve a probar
+    if (error === 'busy') return false;
     const verdict = raw ? guardLine(raw) : { ok: false, reason: 'empty' };
     if (!verdict.ok) {
       await mindLines(db).updateOne(
@@ -324,8 +332,8 @@ export async function rehearseCase(pet, today, id) {
   if (!c) return { error: 'Situación desconocida.', status: 404 };
   if (!mindConfig.writer) return { raw: null, ok: false, text: null, reason: 'no_writer', ms: 0 };
   const start = Date.now();
-  const raw = await mindConfig.writer.write(c.prompt);
-  const verdict = raw ? guardLine(raw) : { ok: false, reason: 'empty' };
+  const { text: raw, error } = await draftWith(mindConfig.writer, c.prompt);
+  const verdict = raw ? guardLine(raw) : { ok: false, reason: error === 'busy' ? 'busy' : 'empty' };
   return { raw, ok: verdict.ok, text: verdict.text ?? null, reason: verdict.reason ?? null, ms: Date.now() - start };
 }
 

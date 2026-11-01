@@ -144,4 +144,39 @@ test('redactor: habla con cualquier API compatible con OpenAI y nunca lanza', as
   assert.equal(await broken.write('x'), null);
   const empty = createMindWriter({ apiKey: 'k', fetchImpl: async () => ({ ok: true, json: async () => ({ choices: [] }) }) });
   assert.equal(await empty.write('x'), null);
+  assert.deepEqual(await empty.draft('x'), { text: null, error: 'empty' });
+});
+
+test('redactor: respeta las pausas del límite por minuto sin gastar llamadas', async () => {
+  const { createMindWriter } = await import('../src/mind-writer.js');
+  let t = 1_000_000;
+  const waits = [];
+  const replies = [];
+  let calls = 0;
+  const headers = (h) => ({ get: (k) => h[k.toLowerCase()] ?? null });
+  const w = createMindWriter({
+    apiKey: 'k', now: () => t, wait: async (ms) => { waits.push(ms); t += ms; },
+    fetchImpl: async () => (calls++, replies.shift()),
+  });
+  const okReply = { ok: true, status: 200, json: async () => ({ choices: [{ message: { content: 'Hola' } }] }) };
+  // Pausa corta: espera y reintenta una vez dentro de la misma petición
+  replies.push({ ok: false, status: 429, headers: headers({ 'retry-after': '3' }) }, okReply);
+  assert.deepEqual(await w.draft('x'), { text: 'Hola', error: null });
+  assert.deepEqual(waits, [3250]);
+  // Pausa larga: no espera; nadie vuelve a llamar hasta que pase
+  replies.push({ ok: false, status: 429, headers: headers({ 'retry-after': '30' }) });
+  assert.deepEqual(await w.draft('x'), { text: null, error: 'busy' });
+  const before = calls;
+  assert.deepEqual(await w.draft('x'), { text: null, error: 'busy' });
+  assert.equal(calls, before);
+  t += 31_000;
+  replies.push(okReply);
+  assert.deepEqual(await w.draft('x'), { text: 'Hola', error: null });
+  // Sin retry-after: pausa por defecto
+  replies.push({ ok: false, status: 429, headers: headers({}) });
+  assert.equal((await w.draft('x')).error, 'busy');
+  assert.equal((await w.draft('x')).error, 'busy');
+  t += 21_000;
+  replies.push(okReply);
+  assert.equal((await w.draft('x')).text, 'Hola');
 });
