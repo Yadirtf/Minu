@@ -127,7 +127,55 @@ data class MinuPet(
     val speciesProposal: PetProposal?,
 )
 
-data class MinuInfo(val terms: MinuTerms, val pet: MinuPet?)
+data class MinuInfo(val terms: MinuTerms, val pet: MinuPet?, val daily: MinuDaily? = null)
+
+/** Los cuatro gestos del Toque de Minu. */
+enum class TouchKind(val id: String, val emoji: String, val label: String, val sentence: String) {
+    HUG("hug", "🤗", "Abrazo", "un abrazo"),
+    KISS("kiss", "😘", "Beso", "un beso"),
+    THINKING("thinking", "💭", "Pienso en ti", "un pienso en ti"),
+    MISS("miss", "🥺", "Te extraño", "un te extraño");
+
+    companion object {
+        fun from(id: String?) = entries.firstOrNull { it.id == id } ?: HUG
+    }
+}
+
+/** Un toque que me llegó hoy y todavía no devuelvo. */
+data class IncomingTouch(val id: String, val kind: TouchKind, val fromName: String, val at: Long)
+
+/** El último toque que mandé hoy y, si ya me lo devolvieron, con qué gesto. */
+data class SentTouch(val id: String, val kind: TouchKind, val at: Long, val reply: TouchKind?)
+
+data class TouchState(val incoming: List<IncomingTouch>, val last: SentTouch?, val left: Int)
+
+/** Pregunta del día: la respuesta del otro solo llega cuando [opened]. */
+data class DailyQuestion(
+    val day: String,
+    val id: String,
+    val text: String,
+    val level: String,
+    val mine: String?,
+    val partnerDone: Boolean,
+    val partner: String?,
+    val opened: Boolean,
+    val myReaction: String?,
+    val partnerReaction: String?,
+)
+
+data class JarNote(val text: String, val byMe: Boolean, val day: String)
+
+/** El frasco "Gracias por..." del mes: [mine] es mi gracias de hoy (una al día). */
+data class GratitudeJar(val month: String, val mine: String?, val items: List<JarNote>)
+
+data class NewsCheer(val text: String, val at: Long)
+data class GoodNews(val id: String, val text: String, val byMe: Boolean, val byName: String, val at: Long, val reply: NewsCheer?)
+
+/** Lo del día con Minu (solo cuando ya nació). */
+data class MinuDaily(val touch: TouchState, val question: DailyQuestion, val jar: GratitudeJar, val news: List<GoodNews>)
+
+/** Frases que el servidor puede actualizar sin otra APK (respaldo sin conexión en MinuVoice). */
+data class MinuContent(val cheers: List<String>, val questionReactions: List<String>)
 
 data class DuoInfo(
     val origin: DuoOrigin?,
@@ -341,6 +389,26 @@ class CloudApi(baseClient: OkHttpClient, private val session: Session) {
     suspend fun dropPetProposal(kind: String): DuoInfo? = parseDuo(call("DELETE", "/duo/pet/proposals/$kind"))
     suspend fun eraseMinuData(): DuoInfo? = parseDuo(call("DELETE", "/duo/minu/data"))
 
+    // ---------- Conexión diaria con Minu ----------
+
+    suspend fun sendTouch(kind: TouchKind): DuoInfo? = parseDuo(call("POST", "/duo/touch", JSONObject().put("kind", kind.id)))
+    suspend fun replyTouch(id: String, kind: TouchKind): DuoInfo? =
+        parseDuo(call("POST", "/duo/touch/$id/reply", JSONObject().put("kind", kind.id)))
+    suspend fun answerQuestion(text: String): DuoInfo? = parseDuo(call("POST", "/duo/question/answer", JSONObject().put("text", text)))
+    suspend fun reactQuestion(text: String): DuoInfo? = parseDuo(call("POST", "/duo/question/react", JSONObject().put("text", text)))
+    suspend fun openedQuestions(): List<DailyQuestion> =
+        objects(call("GET", "/duo/questions").optJSONArray("questions")).map(::parseQuestion)
+    suspend fun giveThanks(text: String): DuoInfo? = parseDuo(call("POST", "/duo/thanks", JSONObject().put("text", text)))
+    /** El frasco de un mes ("AAAA-MM"), para Recuerdos. */
+    suspend fun jar(month: String): List<JarNote> = objects(call("GET", "/duo/jar?month=$month").optJSONArray("items")).map(::parseJarNote)
+    suspend fun shareNews(text: String): DuoInfo? = parseDuo(call("POST", "/duo/news", JSONObject().put("text", text)))
+    suspend fun cheerNews(id: String, text: String): DuoInfo? =
+        parseDuo(call("POST", "/duo/news/$id/cheer", JSONObject().put("text", text)))
+    suspend fun minuContent(): MinuContent {
+        val json = call("GET", "/minu/content")
+        return MinuContent(strings(json.optJSONArray("cheers")), strings(json.optJSONArray("questionReactions")))
+    }
+
     private suspend fun call(method: String, path: String, body: JSONObject? = null, auth: Boolean = true): JSONObject =
         withContext(Dispatchers.IO) {
             val token = session.account.value?.token
@@ -452,8 +520,48 @@ class CloudApi(baseClient: OkHttpClient, private val session: Session) {
                     speciesProposal = proposal("species"),
                 )
             }
-            return MinuInfo(terms, pet)
+            return MinuInfo(terms, pet, json.optJSONObject("daily")?.let(::parseDaily))
         }
+
+        fun parseDaily(d: JSONObject): MinuDaily {
+            val t = d.optJSONObject("touch") ?: JSONObject()
+            val touch = TouchState(
+                incoming = objects(t.optJSONArray("incoming")).map {
+                    IncomingTouch(it.optString("id"), TouchKind.from(it.optString("kind")), it.optString("fromName"), it.optLong("at"))
+                },
+                last = t.optJSONObject("last")?.let {
+                    SentTouch(it.optString("id"), TouchKind.from(it.optString("kind")), it.optLong("at"), it.optStringOrNull("reply")?.let(TouchKind::from))
+                },
+                left = t.optInt("left", 0),
+            )
+            val j = d.optJSONObject("jar") ?: JSONObject()
+            val jar = GratitudeJar(j.optString("month"), j.optStringOrNull("mine"), objects(j.optJSONArray("items")).map(::parseJarNote))
+            val news = objects(d.optJSONArray("news")).map { n ->
+                GoodNews(
+                    n.optString("id"), n.optString("text"), n.optBoolean("byMe"), n.optString("byName"), n.optLong("at"),
+                    n.optJSONObject("reply")?.let { NewsCheer(it.optString("text"), it.optLong("at")) },
+                )
+            }
+            return MinuDaily(touch, parseQuestion(d.optJSONObject("question") ?: JSONObject()), jar, news)
+        }
+
+        fun parseQuestion(q: JSONObject) = DailyQuestion(
+            day = q.optString("day"),
+            id = q.optString("id"),
+            text = q.optString("text"),
+            level = q.optString("level"),
+            mine = q.optStringOrNull("mine"),
+            partnerDone = q.optBoolean("partnerDone"),
+            partner = q.optStringOrNull("partner"),
+            opened = q.optBoolean("opened"),
+            myReaction = q.optStringOrNull("myReaction"),
+            partnerReaction = q.optStringOrNull("partnerReaction"),
+        )
+
+        private fun parseJarNote(g: JSONObject) = JarNote(g.optString("text"), g.optBoolean("byMe"), g.optString("day"))
+
+        private fun strings(array: JSONArray?): List<String> =
+            array?.let { a -> (0 until a.length()).map { a.optString(it) }.filter { it.isNotBlank() } } ?: emptyList()
 
         private fun objects(array: JSONArray?): List<JSONObject> =
             array?.let { a -> (0 until a.length()).map { a.getJSONObject(it) } } ?: emptyList()
