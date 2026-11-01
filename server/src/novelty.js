@@ -44,9 +44,10 @@ function coupleWeights(couple) {
 
 async function freshOptions(db, couple, week, salt = '') {
   const used = await adventures(db)
-    .find({ couple: couple._id, week: { $gte: addDays(week, -7 * ADVENTURE_NO_REPEAT_WEEKS) } }, { projection: { options: 1 } })
+    .find({ couple: couple._id, week: { $gte: addDays(week, -7 * ADVENTURE_NO_REPEAT_WEEKS) } }, { projection: { options: 1, shown: 1 } })
     .toArray();
-  const usedIds = new Set(used.flatMap((a) => a.options ?? []));
+  // Cuenta lo que se mostró, aunque lo hayan cambiado por otras propuestas
+  const usedIds = new Set(used.flatMap((a) => [...(a.options ?? []), ...(a.shown ?? [])]));
   return pickAdventures({ usedIds, seed: `${couple._id}:${week}${salt}`, weights: coupleWeights(couple) }).map((p) => p.id);
 }
 
@@ -90,7 +91,10 @@ export async function reshuffleAdventure(db, couple, today, now = new Date()) {
   if (a.chosen) return { error: 'Ya eligieron su aventura de esta semana.' };
   if (a.reshuffles >= ADVENTURE_RESHUFFLES) return { error: 'Ya pidieron otras propuestas esta semana. ¡Anímense con alguna!' };
   const options = await freshOptions(db, { ...couple }, a.week, `:otra${a.reshuffles + 1}:${a.options.join(',')}`);
-  await adventures(db).updateOne({ _id: a._id }, { $set: { options, votes: {} }, $inc: { reshuffles: 1 } });
+  await adventures(db).updateOne(
+    { _id: a._id },
+    { $set: { options, votes: {} }, $push: { shown: { $each: a.options } }, $inc: { reshuffles: 1 } },
+  );
   return { ok: true };
 }
 
