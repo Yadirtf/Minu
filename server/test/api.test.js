@@ -584,3 +584,112 @@ test('Minu: nace cuando los dos aceptan los términos, se alimenta de dedicatori
     fakeNow = null;
   }
 });
+
+test('Minu: conexión diaria (toque, pregunta del día, gracias por y buenas noticias)', async () => {
+  const a = (await register('minu_lucia')).body.token;
+  const b = (await register('minu_tomas')).body.token;
+  await api('POST', '/partner/request', { username: 'minu_tomas' }, a);
+  await api('POST', '/partner/accept', null, b);
+  try {
+    fakeNow = new Date('2026-11-03T15:00:00Z');
+    // Sin términos aceptados no hay conexión diaria
+    assert.equal((await api('POST', '/duo/touch', { kind: 'hug' }, a)).status, 403);
+    await api('POST', '/duo/terms/accept', null, a);
+    let duo = (await api('POST', '/duo/terms/accept', null, b)).body;
+    const daily0 = duo.minu.daily;
+    assert.ok(daily0.question.text.length > 5);
+    assert.equal(daily0.question.mine, null);
+    assert.notEqual(daily0.question.level, 'deep'); // Minu es cría: nada profundo todavía
+    assert.equal(daily0.touch.left, 10);
+    assert.deepEqual(daily0.touch.incoming, []);
+    assert.deepEqual(daily0.jar, { month: '2026-11', mine: null, items: [] });
+    assert.deepEqual(daily0.news, []);
+    const born = duo.minu.pet.energy;
+
+    // Toque: mandarlo no alimenta; devolverlo sí
+    assert.equal((await api('POST', '/duo/touch', { kind: 'dragon' }, a)).status, 400);
+    pushes.length = 0;
+    duo = (await api('POST', '/duo/touch', { kind: 'hug' }, a)).body;
+    assert.equal(duo.minu.pet.energy, born);
+    assert.equal(duo.minu.daily.touch.last.reply, null);
+    assert.equal(duo.minu.daily.touch.left, 9);
+    assert.ok(pushes.some((p) => p.data.type === 'minu.touch' && p.data.kind === 'hug' && p.data.fromName === 'minu_lucia'));
+    duo = (await api('GET', '/duo', null, b)).body;
+    const [incoming] = duo.minu.daily.touch.incoming;
+    assert.equal(incoming.kind, 'hug');
+    assert.equal(incoming.fromName, 'minu_lucia');
+    assert.equal((await api('POST', `/duo/touch/${incoming.id}/reply`, { kind: 'kiss' }, a)).status, 409); // no el propio
+    duo = (await api('POST', `/duo/touch/${incoming.id}/reply`, { kind: 'kiss' }, b)).body;
+    assert.deepEqual(duo.minu.daily.touch.incoming, []);
+    assert.equal(duo.minu.pet.energy, born + 5);
+    assert.equal((await api('POST', `/duo/touch/${incoming.id}/reply`, { kind: 'kiss' }, b)).status, 409);
+    duo = (await api('GET', '/duo', null, a)).body;
+    assert.equal(duo.minu.daily.touch.last.reply, 'kiss');
+
+    // Pregunta del día: sellada hasta que responden los dos
+    duo = (await api('POST', '/duo/question/answer', { text: '  Pizza   con piña  ' }, a)).body;
+    assert.equal(duo.minu.daily.question.mine, 'Pizza con piña');
+    assert.equal(duo.minu.daily.question.opened, false);
+    duo = (await api('GET', '/duo', null, b)).body;
+    assert.equal(duo.minu.daily.question.partnerDone, true);
+    assert.equal(duo.minu.daily.question.partner, null);
+    assert.equal(duo.minu.daily.question.text, daily0.question.text); // la misma para los dos
+    assert.equal((await api('POST', '/duo/question/react', { text: 'Cuéntame más' }, b)).status, 409);
+    assert.equal((await api('POST', '/duo/question/answer', { text: '' }, b)).status, 400);
+    duo = (await api('POST', '/duo/question/answer', { text: 'Arepa' }, b)).body;
+    assert.equal(duo.minu.daily.question.opened, true);
+    assert.equal(duo.minu.daily.question.partner, 'Pizza con piña');
+    assert.equal(duo.minu.pet.energy, born + 15);
+    assert.equal((await api('POST', '/duo/question/answer', { text: 'Otra' }, a)).status, 400);
+    await api('POST', '/duo/question/react', { text: 'Cuéntame más 💬' }, b);
+    duo = (await api('GET', '/duo', null, a)).body;
+    assert.equal(duo.minu.daily.question.partner, 'Arepa');
+    assert.equal(duo.minu.daily.question.partnerReaction, 'Cuéntame más 💬');
+    assert.equal((await api('GET', '/duo/questions', null, a)).body.questions.length, 1);
+
+    // Gracias por...: una al día por persona
+    duo = (await api('POST', '/duo/thanks', { text: 'Por el café de esta mañana' }, a)).body;
+    assert.equal(duo.minu.daily.jar.mine, 'Por el café de esta mañana');
+    assert.equal(duo.minu.pet.energy, born + 20);
+    assert.equal((await api('POST', '/duo/thanks', { text: 'Otra' }, a)).status, 409);
+    duo = (await api('GET', '/duo', null, b)).body;
+    assert.deepEqual(duo.minu.daily.jar.items, [{ text: 'Por el café de esta mañana', byMe: false, day: '2026-11-03' }]);
+    assert.equal((await api('GET', '/duo/jar?month=2026-11', null, b)).body.items.length, 1);
+    assert.equal((await api('GET', '/duo/jar?month=nov', null, b)).status, 400);
+
+    // Te cuento algo bueno: el otro celebra (una vez), y eso alimenta
+    duo = (await api('POST', '/duo/news', { text: '¡Me dieron el ascenso!' }, b)).body;
+    const news = duo.minu.daily.news[0];
+    assert.equal(news.byMe, true);
+    assert.equal((await api('POST', `/duo/news/${news.id}/cheer`, { text: 'Yo' }, b)).status, 409); // no la propia
+    duo = (await api('POST', `/duo/news/${news.id}/cheer`, { text: '¡Qué orgullo me das!' }, a)).body;
+    assert.equal(duo.minu.daily.news[0].reply.text, '¡Qué orgullo me das!');
+    assert.equal(duo.minu.daily.news[0].byMe, false);
+    assert.equal(duo.minu.pet.energy, born + 25);
+    assert.equal((await api('POST', `/duo/news/${news.id}/cheer`, { text: 'Otra vez' }, a)).status, 409);
+
+    // Banco de frases para la app
+    assert.ok((await api('GET', '/minu/content', null, a)).body.cheers.length >= 5);
+
+    // Límite de toques por día
+    for (let i = 0; i < 9; i++) await api('POST', '/duo/touch', { kind: 'thinking' }, a);
+    assert.equal((await api('POST', '/duo/touch', { kind: 'miss' }, a)).status, 429);
+
+    // Al día siguiente: pregunta nueva y los toques de ayer ya no se muestran
+    fakeNow = new Date('2026-11-04T15:00:00Z');
+    duo = (await api('GET', '/duo', null, b)).body;
+    assert.notEqual(duo.minu.daily.question.id, daily0.question.id);
+    assert.deepEqual(duo.minu.daily.touch.incoming, []);
+    assert.equal(duo.minu.daily.jar.items.length, 1); // el frasco es del mes
+
+    // Borrar mis datos se lleva mis gracias, respuestas y noticias
+    await api('DELETE', '/duo/minu/data', null, a);
+    await api('POST', '/duo/terms/accept', null, a);
+    assert.equal((await api('GET', '/duo/jar?month=2026-11', null, b)).body.items.length, 0);
+    const [old] = (await api('GET', '/duo/questions', null, b)).body.questions;
+    assert.equal(old.partner, null);
+    assert.equal(old.mine, 'Arepa');
+  } finally {
+    fakeNow = null;
+  }
+});

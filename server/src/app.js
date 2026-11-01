@@ -5,7 +5,8 @@ import { requireAuth, signToken } from './auth.js';
 import { chooseRescue, giveUpRescue, markDedication, refreshStreak, RESCUE_TYPES, streakView, validTimeZone } from './duo.js';
 import { anniversariesView, anniversaryView, hug, openSolo, sealedLetters, voteSong, writeLetter } from './anniversary.js';
 import { answerCapsule, dedicationDays, ensureCapsule, joinedOn, missionsView, mixtape, markMission, openedCapsules, serializeCapsule } from './memories.js';
-import { minuState } from './minu.js';
+import { minuAllowed, minuState } from './minu.js';
+import { remember } from './memory.js';
 import { registerMinuRoutes } from './minuRoutes.js';
 import { recordPetEvent } from './pet.js';
 
@@ -220,6 +221,14 @@ export function createApp(db, config, realtime, services = {}) {
     };
     const { insertedId } = await dedications(db).insertOne(dedication);
     dedication._id = insertedId;
+    // Minu recuerda las canciones que se dedican (solo si los dos aceptaron sus términos)
+    const couple = await couples(db).findOne({ _id: day.key }, { projection: { terms: 1 } });
+    if (minuAllowed(couple, me._id, me.partnerId)) {
+      await remember(db, day.key, {
+        kind: 'song', by: me._id, ref: insertedId.toString(), day: day.today,
+        text: song.title, data: { videoId: song.videoId, uploader: song.uploader }, now: clock(),
+      });
+    }
     const delivered = realtime.notify(me.partnerId, {
       type: 'dedication',
       dedication: serializeDedication(dedication, me.partnerId),
@@ -532,7 +541,7 @@ export async function duoState(db, me, now = new Date()) {
     letter: await sealedLetters(db, me, now),
     streak,
     // Minu, la mascota: términos de privacidad y, si los dos aceptaron, su estado
-    minu: await minuState(db, couple, me, streak.today, joined),
+    minu: await minuState(db, couple, me, streak.today, joined, now),
   };
 }
 

@@ -1,4 +1,5 @@
 import { coupleKey, couples } from './db.js';
+import { registerDailyRoutes } from './dailyRoutes.js';
 import { localDay } from './duo.js';
 import { acceptTerms, eraseMyMinuData, minuAllowed } from './minu.js';
 import { acceptPetChange, dropPetProposal, proposePetChange } from './pet.js';
@@ -68,6 +69,9 @@ export function registerMinuRoutes(app, ctx) {
     if (await dropPetProposal(db, req.couple._id, kind)) realtime.notify(me.partnerId, { type: 'duo.update' });
     res.json(await duoState(db, me, clock()));
   });
+
+  // Conexión diaria: Toque, Pregunta del día, Gracias por..., Te cuento algo bueno
+  registerDailyRoutes(app, { ...ctx, linked, consented });
 
   // Borrar mis datos de Minu (no requiere haber aceptado: siempre se puede borrar)
   app.delete('/duo/minu/data', auth, linked, async (req, res) => {
