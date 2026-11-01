@@ -283,7 +283,12 @@ internal fun AppRoot(
     }
     // Puntito en Dúo: Minu espera que aceptes despertarle, o tu pareja te propuso un cambio
     val minuNeedsYou = duo?.minu?.takeIf { partner?.linked == true }?.let { m ->
-        !m.terms.mine || listOfNotNull(m.pet?.nameProposal, m.pet?.speciesProposal).any { !it.mine }
+        val trust = m.trust
+        !m.terms.mine || listOfNotNull(m.pet?.nameProposal, m.pet?.speciesProposal).any { !it.mine } ||
+            // Una carta sellada, una promesa cumplida por agradecer o una frase de reparación esperando
+            trust?.unsaid?.sealed?.isNotEmpty() == true ||
+            trust?.promises?.items?.any { !it.mine && it.kept && !it.confirmed } == true ||
+            trust?.truce?.let { it.partnerRepair != null && it.myRepair == null } == true
     } == true
     fun closeDrawerThen(action: () -> Unit) {
         action()

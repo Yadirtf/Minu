@@ -113,6 +113,13 @@ import com.daniel.reproductor.ui.together.minu.MinuNewsSheet
 import com.daniel.reproductor.ui.together.minu.MinuQuestionSheet
 import com.daniel.reproductor.ui.together.minu.MinuHouse
 import com.daniel.reproductor.ui.together.minu.MinuHouseActions
+import com.daniel.reproductor.ui.together.minu.MinuCareDialog
+import com.daniel.reproductor.ui.together.minu.MinuPromisesSheet
+import com.daniel.reproductor.ui.together.minu.MinuTruceInvite
+import com.daniel.reproductor.ui.together.minu.MinuTruceSheet
+import com.daniel.reproductor.ui.together.minu.MinuUnsaidSheet
+import com.daniel.reproductor.ui.together.minu.PromiseActions
+import com.daniel.reproductor.ui.together.minu.UnsaidActions
 import com.daniel.reproductor.ui.together.minu.MinuTermsSheet
 import com.daniel.reproductor.ui.together.minu.MinuVoice
 import kotlinx.coroutines.launch
@@ -325,6 +332,7 @@ fun TogetherScreen(vm: TogetherViewModel, lib: LibraryViewModel, player: PlayerS
                 accept = { vm.acceptPetProposal(it) },
                 drop = { vm.dropPetProposal(it) },
                 erase = { vm.eraseMinuData() },
+                help = { vm.loadMinuContent(); vm.showHelp() },
             ),
             onDismiss = { showMinuHouse = false },
         )
@@ -352,8 +360,56 @@ fun TogetherScreen(vm: TogetherViewModel, lib: LibraryViewModel, player: PlayerS
                 onCheer = { id, text -> vm.cheerNews(id, text) },
                 onDismiss = { dailySheet = null },
             )
+            // Confianza y reparación
+            MinuDailySheet.UNSAID -> minu?.trust?.let { trust ->
+                MinuUnsaidSheet(
+                    pet, trust.unsaid, name,
+                    feelStarters = minuContent?.feelStarters?.takeIf { it.isNotEmpty() } ?: MinuVoice.FEEL_STARTERS,
+                    needStarters = minuContent?.needStarters?.takeIf { it.isNotEmpty() } ?: MinuVoice.NEED_STARTERS,
+                    actions = UnsaidActions(
+                        send = { feel, whenText, need, onSent -> vm.sendUnsaid(feel, whenText, need, onSent) },
+                        open = { vm.openUnsaid(it) },
+                        thank = { vm.thankUnsaid(it) },
+                        reply = { id, text -> vm.replyUnsaid(id, text) },
+                    ),
+                    onDismiss = { dailySheet = null },
+                )
+            }
+            MinuDailySheet.PROMISES -> minu?.trust?.let { trust ->
+                MinuPromisesSheet(
+                    pet, trust.promises, name,
+                    PromiseActions(
+                        make = { text, dueAt, onMade -> vm.makePromise(text, dueAt, onMade) },
+                        keep = { vm.keepPromise(it) },
+                        confirm = { vm.confirmPromise(it) },
+                        drop = { vm.dropPromise(it) },
+                    ),
+                    onDismiss = { dailySheet = null },
+                )
+            }
+            MinuDailySheet.TRUCE -> {
+                val truce = minu?.trust?.truce
+                if (truce == null) {
+                    MinuTruceInvite(pet, name, onStart = { vm.startTruce() }, onDismiss = { dailySheet = null })
+                } else {
+                    MinuTruceSheet(
+                        pet, truce, name,
+                        repairs = minuContent?.repairs?.takeIf { it.isNotEmpty() } ?: MinuVoice.REPAIRS,
+                        onExtend = { vm.extendTruce() },
+                        onReady = { vm.readyTruce() },
+                        onRepair = { vm.repairTruce(it) },
+                        onDismiss = { dailySheet = null },
+                    )
+                }
+            }
             null -> Unit
         }
+    }
+
+    // Cuidado: encima de cualquier hoja, cuando algo suena a peligro o desde "Si algo no está bien"
+    val care by vm.care.collectAsStateWithLifecycle()
+    care?.let { request ->
+        MinuCareDialog(request.help, onDismiss = { vm.dismissCare() }, onProceed = request.proceed?.let { { vm.proceedCare() } })
     }
 
     if (editingOrigin) {

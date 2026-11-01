@@ -156,6 +156,18 @@ class PartnerHub(
     suspend fun giveThanks(text: String) = setDuo(api.giveThanks(text))
     suspend fun shareNews(text: String) = setDuo(api.shareNews(text))
     suspend fun cheerNews(id: String, text: String) = setDuo(api.cheerNews(id, text))
+    suspend fun sendUnsaid(feel: String, whenText: String, need: String) = setDuo(api.sendUnsaid(feel, whenText, need))
+    suspend fun openUnsaid(id: String) = setDuo(api.openUnsaid(id))
+    suspend fun thankUnsaid(id: String) = setDuo(api.thankUnsaid(id))
+    suspend fun replyUnsaid(id: String, text: String) = setDuo(api.replyUnsaid(id, text))
+    suspend fun startTruce() = setDuo(api.startTruce())
+    suspend fun extendTruce() = setDuo(api.extendTruce())
+    suspend fun readyTruce() = setDuo(api.readyTruce())
+    suspend fun repairTruce(text: String) = setDuo(api.repairTruce(text))
+    suspend fun makePromise(text: String, dueAt: Long) = setDuo(api.makePromise(text, dueAt))
+    suspend fun keepPromise(id: String) = setDuo(api.keepPromise(id))
+    suspend fun confirmPromise(id: String) = setDuo(api.confirmPromise(id))
+    suspend fun dropPromise(id: String) = setDuo(api.dropPromise(id))
 
     /** Solo lo de Dúo (racha y fecha), sin pedir de nuevo pareja y cartas. */
     fun refreshDuo() {
@@ -167,6 +179,8 @@ class PartnerHub(
     private fun setDuo(info: DuoInfo?) {
         _duo.value = info
         DuoPrefs.save(context, info?.origin?.startedOn, _partner.value?.partner?.displayName)
+        // Recordatorios locales de mis promesas (sin pareja, se cancelan todos)
+        if (info == null || info.minu != null) runCatching { PromiseReminders.sync(context, info?.minu?.trust?.promises) }
     }
 
     // ---------- Pareja ----------

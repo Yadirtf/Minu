@@ -29,6 +29,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.daniel.reproductor.cloud.MinuDaily
 import com.daniel.reproductor.cloud.MinuInfo
+import com.daniel.reproductor.cloud.MinuTrust
 import com.daniel.reproductor.cloud.TouchKind
 import com.daniel.reproductor.cloud.PetMood
 import com.daniel.reproductor.cloud.PetSpecies
@@ -37,8 +38,8 @@ import com.daniel.reproductor.ui.components.PillButton
 import com.daniel.reproductor.ui.theme.LocalAppStyle
 import com.daniel.reproductor.ui.together.THREAD_RED
 
-/** Las hojas de la conexión diaria que se abren desde la tarjeta de Minu. */
-enum class MinuDailySheet { QUESTION, JAR, NEWS }
+/** Las hojas que se abren desde la tarjeta de Minu: lo del día y lo de confianza. */
+enum class MinuDailySheet { QUESTION, JAR, NEWS, UNSAID, PROMISES, TRUCE }
 
 /**
  * La tarjeta de Minu bajo el hilo: invita a conocerlo (términos), espera a la pareja, o ya despierto
@@ -105,9 +106,16 @@ fun MinuEntry(
                 }
                 Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, "Casita de ${pet.name}", tint = c.onSurfaceVariant)
             }
-            minu.daily?.let { daily ->
-                MinuTouchBar(daily.touch.left, daily.touch.last, partnerName, onTouch)
-                DailyTiles(daily, partnerName, onOpenDaily)
+            val truce = minu.trust?.truce
+            if (truce != null) {
+                // Durante la Tregua Minu deja de jugar: solo respira con ustedes
+                TruceCard(pet, truce, partnerName) { onOpenDaily(MinuDailySheet.TRUCE) }
+            } else {
+                minu.daily?.let { daily ->
+                    MinuTouchBar(daily.touch.left, daily.touch.last, partnerName, onTouch)
+                    DailyTiles(daily, partnerName, onOpenDaily)
+                }
+                minu.trust?.let { TrustRow(it, partnerName, onOpenDaily) }
             }
         }
     }
@@ -131,6 +139,42 @@ private fun DailyTiles(daily: MinuDaily, partnerName: String, onOpen: (MinuDaily
         DailyTile("💌", "Pregunta del día", questionStatus.first, questionStatus.second, Modifier.weight(1f)) { onOpen(MinuDailySheet.QUESTION) }
         DailyTile("🫙", "Gracias por…", jarStatus, false, Modifier.weight(1f)) { onOpen(MinuDailySheet.JAR) }
         DailyTile("✨", "Algo bueno", newsStatus, newsWaiting, Modifier.weight(1f)) { onOpen(MinuDailySheet.NEWS) }
+    }
+}
+
+/**
+ * Confianza y reparación, en una fila más discreta que lo del día: no son juegos, son lugares a los que
+ * se va cuando hace falta. El puntito marca una carta sellada o una promesa cumplida por agradecer.
+ */
+@Composable
+private fun TrustRow(trust: MinuTrust, partnerName: String, onOpen: (MinuDailySheet) -> Unit) {
+    val letters = trust.unsaid.sealed.size
+    val toThank = trust.promises.items.count { !it.mine && it.kept && !it.confirmed }
+    val open = trust.promises.items.count { !it.confirmed }
+    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        TrustChip("📮", if (letters > 0) "Carta de $partnerName" else "Buzón", letters > 0, Modifier.weight(1f)) { onOpen(MinuDailySheet.UNSAID) }
+        TrustChip("🤞", if (toThank > 0) "¡Cumplió!" else if (open > 0) "Promesas · $open" else "Promesas", toThank > 0, Modifier.weight(1f)) { onOpen(MinuDailySheet.PROMISES) }
+        TrustChip("🕊️", "Pausa", false, Modifier.weight(1f)) { onOpen(MinuDailySheet.TRUCE) }
+    }
+}
+
+@Composable
+private fun TrustChip(emoji: String, label: String, attention: Boolean, modifier: Modifier, onClick: () -> Unit) {
+    val c = MaterialTheme.colorScheme
+    Surface(
+        color = c.surfaceContainer, shape = RoundedCornerShape(50),
+        border = BorderStroke(1.dp, if (attention) THREAD_RED.copy(alpha = 0.7f) else c.outlineVariant.copy(alpha = 0.6f)),
+        modifier = modifier.clickable(onClick = onClick),
+    ) {
+        Row(Modifier.padding(horizontal = 10.dp, vertical = 9.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.Center) {
+            Text(emoji, style = MaterialTheme.typography.titleSmall)
+            Spacer(Modifier.width(6.dp))
+            Text(label, style = MaterialTheme.typography.labelMedium, color = if (attention) THREAD_RED else c.onSurface, maxLines = 1)
+            if (attention) {
+                Spacer(Modifier.width(4.dp))
+                Box(Modifier.size(7.dp).background(THREAD_RED, CircleShape))
+            }
+        }
     }
 }
 

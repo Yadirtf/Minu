@@ -62,6 +62,7 @@ class MinuHouseActions(
     val accept: (kind: String) -> Unit,
     val drop: (kind: String) -> Unit,
     val erase: () -> Unit,
+    val help: () -> Unit = {},
 )
 
 /**
@@ -149,12 +150,24 @@ fun MinuHouse(pet: MinuPet, partnerName: String, actions: MinuHouseActions, onDi
             // Lo que viene
             Text("Muy pronto en mi casita", style = MaterialTheme.typography.titleMedium)
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                listOf("💌\nBuzón", "🗺️\nAventura", "🤞\nPromesas", "🕊️\nTregua").forEach { label ->
+                listOf("🗺️\nAventura semanal", "🎲\nRuleta de citas", "💬\nCumplidos a ciegas").forEach { label ->
                     Surface(color = c.surfaceContainerHigh, shape = RoundedCornerShape(16.dp), modifier = Modifier.weight(1f)) {
                         Text(
                             label, textAlign = TextAlign.Center, style = MaterialTheme.typography.labelMedium,
                             color = c.onSurfaceVariant, modifier = Modifier.padding(vertical = 10.dp, horizontal = 4.dp),
                         )
+                    }
+                }
+            }
+
+            // Ayuda profesional, siempre a mano
+            Surface(color = c.surfaceContainerHigh, shape = RoundedCornerShape(16.dp), modifier = Modifier.fillMaxWidth().clickable(onClick = actions.help)) {
+                Row(Modifier.padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Text("🤍", style = MaterialTheme.typography.titleMedium)
+                    Spacer(Modifier.size(10.dp))
+                    Column(Modifier.weight(1f)) {
+                        Text("Si algo no está bien", style = MaterialTheme.typography.titleSmall)
+                        Text("Líneas de ayuda gratuitas y en reserva.", style = MaterialTheme.typography.bodySmall, color = c.onSurfaceVariant)
                     }
                 }
             }
@@ -175,7 +188,7 @@ fun MinuHouse(pet: MinuPet, partnerName: String, actions: MinuHouseActions, onDi
             title = { Text("¿Borrar lo que le contaste?") },
             text = {
                 Text(
-                    "${pet.name} olvidará lo que aportaste (tus toques, respuestas, gracias y buenas noticias) y se pausará " +
+                    "${pet.name} olvidará lo que aportaste (tus toques, respuestas, gracias, buenas noticias, cartas del Buzón y promesas) y se pausará " +
                         "hasta que vuelvas a aceptar sus términos. Su nombre y su forma son de los dos, así que se quedan.",
                 )
             },
