@@ -29,6 +29,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.daniel.reproductor.cloud.MinuDaily
 import com.daniel.reproductor.cloud.MinuInfo
+import com.daniel.reproductor.cloud.MinuNovelty
 import com.daniel.reproductor.cloud.MinuTrust
 import com.daniel.reproductor.cloud.TouchKind
 import com.daniel.reproductor.cloud.PetMood
@@ -38,8 +39,8 @@ import com.daniel.reproductor.ui.components.PillButton
 import com.daniel.reproductor.ui.theme.LocalAppStyle
 import com.daniel.reproductor.ui.together.THREAD_RED
 
-/** Las hojas que se abren desde la tarjeta de Minu: lo del día y lo de confianza. */
-enum class MinuDailySheet { QUESTION, JAR, NEWS, UNSAID, PROMISES, TRUCE }
+/** Las hojas que se abren desde la tarjeta de Minu: lo del día, lo de confianza y lo nuevo de la semana. */
+enum class MinuDailySheet { QUESTION, JAR, NEWS, UNSAID, PROMISES, TRUCE, ADVENTURE, ROULETTE, COMPLIMENTS, LOVE }
 
 /**
  * La tarjeta de Minu bajo el hilo: invita a conocerlo (términos), espera a la pareja, o ya despierto
@@ -115,6 +116,7 @@ fun MinuEntry(
                     MinuTouchBar(daily.touch.left, daily.touch.last, partnerName, onTouch)
                     DailyTiles(daily, partnerName, onOpenDaily)
                 }
+                minu.novelty?.let { NoveltyRow(it, partnerName, onOpenDaily) }
                 minu.trust?.let { TrustRow(it, partnerName, onOpenDaily) }
             }
         }
@@ -139,6 +141,44 @@ private fun DailyTiles(daily: MinuDaily, partnerName: String, onOpen: (MinuDaily
         DailyTile("💌", "Pregunta del día", questionStatus.first, questionStatus.second, Modifier.weight(1f)) { onOpen(MinuDailySheet.QUESTION) }
         DailyTile("🫙", "Gracias por…", jarStatus, false, Modifier.weight(1f)) { onOpen(MinuDailySheet.JAR) }
         DailyTile("✨", "Algo bueno", newsStatus, newsWaiting, Modifier.weight(1f)) { onOpen(MinuDailySheet.NEWS) }
+    }
+}
+
+/**
+ * Lo nuevo: la Aventura de la semana, la Ruleta de citas y los Cumplidos a ciegas. Debajo, si hay, la
+ * sugerencia del día según lo que cada uno contó en el test (nunca una etiqueta, solo una idea).
+ */
+@Composable
+private fun NoveltyRow(novelty: MinuNovelty, partnerName: String, onOpen: (MinuDailySheet) -> Unit) {
+    val adv = novelty.adventure
+    val advStatus = when {
+        adv.done && adv.myRating == null -> "¿Qué tal fue?" to true
+        adv.done -> "¡Vivida!" to false
+        adv.chosen != null -> adv.chosen.title to false
+        adv.partnerVote != null && adv.myVote == null -> "$partnerName ya votó" to true
+        adv.myVote != null -> "Esperando a $partnerName" to false
+        else -> "3 planes nuevos" to false
+    }
+    val box = novelty.compliments
+    val giftStatus = when {
+        box.surprise != null -> "¡Hay una sorpresa!" to true
+        box.askNew -> "Escribe otros 3" to true
+        box.pending > 0 -> "${box.pending} por soltar" to false
+        else -> "Escribe 3" to false
+    }
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            DailyTile("🗺️", "Aventura", advStatus.first, advStatus.second, Modifier.weight(1f)) { onOpen(MinuDailySheet.ADVENTURE) }
+            DailyTile("🎡", "Ruleta de citas", "Gírala juntos", false, Modifier.weight(1f)) { onOpen(MinuDailySheet.ROULETTE) }
+            DailyTile("🎁", "Cumplidos", giftStatus.first, giftStatus.second, Modifier.weight(1f)) { onOpen(MinuDailySheet.COMPLIMENTS) }
+        }
+        novelty.love.suggestion?.let { tip ->
+            Row(Modifier.fillMaxWidth().padding(horizontal = 4.dp), verticalAlignment = Alignment.Top) {
+                Text("💡", style = MaterialTheme.typography.bodyMedium)
+                Spacer(Modifier.width(6.dp))
+                Text(tip, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+        }
     }
 }
 

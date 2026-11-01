@@ -46,6 +46,7 @@ import androidx.compose.foundation.lazy.grid.LazyGridItemSpanScope
 import androidx.compose.foundation.lazy.grid.LazyGridScope
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Headphones
@@ -54,6 +55,7 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
@@ -724,6 +726,14 @@ private fun MonthView(
     val jarNotes = jarMonths.flatMap { jars[it].orEmpty() }
         .filter { it.day >= t.from.toString() && it.day < t.to.toString() }
         .sortedBy { it.day }
+    // Las aventuras que vivieron estas semanas, como polaroids con su foto y su canción
+    val adventureMap by vm.adventures.collectAsStateWithLifecycle()
+    val photos by vm.photos.collectAsStateWithLifecycle()
+    LaunchedEffect(jarMonths) { if (vm.duo.value?.minu?.pet != null) jarMonths.forEach { vm.loadAdventures(it) } }
+    val lived = jarMonths.flatMap { adventureMap[it].orEmpty() }
+        .filter { it.week >= t.from.toString() && it.week < t.to.toString() }
+        .distinctBy { it.week }
+    LaunchedEffect(lived.map { it.week }) { lived.filter { it.hasPhoto }.forEach { vm.loadPhoto(it.week) } }
     val inf = rememberInfiniteTransition(label = "carretes")
     val spin by inf.animateFloat(0f, 360f, infiniteRepeatable(tween(2400, easing = LinearEasing)), label = "giro")
     val sway by inf.animateFloat(-1f, 1f, infiniteRepeatable(tween(3000, easing = FastOutSlowInEasing), RepeatMode.Reverse), label = "mecer")
@@ -807,6 +817,23 @@ private fun MonthView(
             items(jarNotes, key = { "jar${it.day}${it.byMe}" }) { note -> JarNoteCard(note, partnerName) }
         }
 
+        if (lived.isNotEmpty()) {
+            item {
+                Column {
+                    Text("Aventuras del mes", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, modifier = Modifier.padding(top = 16.dp))
+                    HorizontalDivider(Modifier.padding(top = 6.dp))
+                }
+            }
+            item {
+                LazyRow(
+                    horizontalArrangement = Arrangement.spacedBy(4.dp),
+                    contentPadding = PaddingValues(vertical = 12.dp),
+                ) {
+                    itemsIndexed(lived, key = { _, a -> a.week }) { i, a -> AdventureMemory(a, photos[a.week], tilt = if (i % 2 == 0) -3f else 2.5f, vm) }
+                }
+            }
+        }
+
         if (mix != null && all.isNotEmpty()) {
             side("Lado A · tus dedicatorias", mix.sideA, vm)
             side("Lado B · las de $partnerName", mix.sideB, vm)
@@ -833,6 +860,40 @@ private fun androidx.compose.foundation.lazy.LazyListScope.side(title: String, t
                     maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
+            }
+        }
+    }
+}
+
+/** Una aventura vivida: su foto en polaroid (o el emoji del plan si no hubo foto) y su canción. */
+@Composable
+private fun AdventureMemory(a: com.daniel.reproductor.cloud.Adventure, photo: androidx.compose.ui.graphics.ImageBitmap?, tilt: Float, vm: TogetherViewModel) {
+    val plan = a.chosen ?: return
+    Column(Modifier.width(170.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+        if (photo != null) {
+            com.daniel.reproductor.ui.together.minu.Polaroid(photo, plan.title, Modifier.fillMaxWidth(), tilt = tilt)
+        } else {
+            androidx.compose.material3.Surface(
+                color = androidx.compose.ui.graphics.Color.White, shape = androidx.compose.foundation.shape.RoundedCornerShape(4.dp),
+                shadowElevation = 6.dp, modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp).graphicsLayer { rotationZ = tilt },
+            ) {
+                Column(Modifier.padding(10.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                    Box(Modifier.fillMaxWidth().height(120.dp).background(androidx.compose.ui.graphics.Color(0xFFF3E6CF)), contentAlignment = Alignment.Center) {
+                        Text(plan.emoji, style = MaterialTheme.typography.displaySmall)
+                    }
+                    Spacer(Modifier.height(8.dp))
+                    Text(plan.title, style = MaterialTheme.typography.labelMedium, color = androidx.compose.ui.graphics.Color(0xFF3A2A1A), maxLines = 2, overflow = TextOverflow.Ellipsis)
+                }
+            }
+        }
+        a.song?.let { song ->
+            Row(
+                Modifier.padding(top = 10.dp).clickable { vm.playSong(song) },
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Icon(Icons.Default.PlayArrow, null, Modifier.size(16.dp), tint = MaterialTheme.colorScheme.primary)
+                Spacer(Modifier.width(4.dp))
+                Text(song.title, style = MaterialTheme.typography.labelSmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
             }
         }
     }

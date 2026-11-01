@@ -107,6 +107,12 @@ import com.daniel.reproductor.ui.player.PlayerState
 import com.daniel.reproductor.ui.profile.ProfileButton
 import com.daniel.reproductor.ui.theme.LocalAppStyle
 import com.daniel.reproductor.ui.together.minu.MinuDailySheet
+import com.daniel.reproductor.ui.together.minu.AdventureActions
+import com.daniel.reproductor.ui.together.minu.ComplimentActions
+import com.daniel.reproductor.ui.together.minu.MinuAdventureSheet
+import com.daniel.reproductor.ui.together.minu.MinuComplimentsSheet
+import com.daniel.reproductor.ui.together.minu.MinuLoveQuizSheet
+import com.daniel.reproductor.ui.together.minu.MinuRouletteSheet
 import com.daniel.reproductor.ui.together.minu.MinuEntry
 import com.daniel.reproductor.ui.together.minu.MinuJarSheet
 import com.daniel.reproductor.ui.together.minu.MinuNewsSheet
@@ -155,6 +161,8 @@ fun TogetherScreen(vm: TogetherViewModel, lib: LibraryViewModel, player: PlayerS
     var dailySheet by rememberSaveable { mutableStateOf<MinuDailySheet?>(null) }
     val minuContent by vm.minuContent.collectAsStateWithLifecycle()
     val pastQuestions by vm.pastQuestions.collectAsStateWithLifecycle()
+    val photos by vm.photos.collectAsStateWithLifecycle()
+    val allSongs by lib.allSongs.collectAsStateWithLifecycle()
     val saveSheet = rememberSaveToPlaylistState()
     val save = player?.takeIf { it.hasMedia }?.let { p ->
         SaveAction(saved = p.currentVideoId in savedIds) { saveSheet.open(p.currentSong()) }
@@ -333,7 +341,9 @@ fun TogetherScreen(vm: TogetherViewModel, lib: LibraryViewModel, player: PlayerS
                 drop = { vm.dropPetProposal(it) },
                 erase = { vm.eraseMinuData() },
                 help = { vm.loadMinuContent(); vm.showHelp() },
+                loveTest = { showMinuHouse = false; dailySheet = MinuDailySheet.LOVE },
             ),
+            loveDone = minu.novelty?.love?.mine == true,
             onDismiss = { showMinuHouse = false },
         )
     }
@@ -398,6 +408,53 @@ fun TogetherScreen(vm: TogetherViewModel, lib: LibraryViewModel, player: PlayerS
                         onExtend = { vm.extendTruce() },
                         onReady = { vm.readyTruce() },
                         onRepair = { vm.repairTruce(it) },
+                        onDismiss = { dailySheet = null },
+                    )
+                }
+            }
+            // Novedad: Aventura de la semana, Ruleta de citas, Cumplidos a ciegas y el test
+            MinuDailySheet.ADVENTURE -> minu?.novelty?.let { novelty ->
+                val adventure = novelty.adventure
+                MinuAdventureSheet(
+                    pet, adventure, name,
+                    songs = (listOfNotNull(player?.takeIf { it.hasMedia }?.currentSong(), duo?.origin?.song) +
+                        dedications.map { it.song } + allSongs.orEmpty().take(30)).distinctBy { it.videoId },
+                    photo = photos[adventure.week],
+                    actions = AdventureActions(
+                        vote = { vm.voteAdventure(it) },
+                        reshuffle = { vm.reshuffleAdventure() },
+                        complete = { vm.completeAdventure(it) },
+                        rate = { week, stars -> vm.rateAdventure(week, stars) },
+                        uploadPhoto = { week, jpeg -> vm.uploadAdventurePhoto(week, jpeg) },
+                        loadPhoto = { vm.loadPhoto(it) },
+                    ),
+                    onDismiss = { dailySheet = null },
+                )
+            }
+            MinuDailySheet.ROULETTE -> MinuRouletteSheet(
+                pet, name, dedications, duo?.origin?.song,
+                partnerOnline = linkedPartner?.online == true,
+                onPlay = { date, together -> vm.playRoulette(date, together); dailySheet = null },
+                onDismiss = { dailySheet = null },
+            )
+            MinuDailySheet.COMPLIMENTS -> minu?.novelty?.let { novelty ->
+                MinuComplimentsSheet(
+                    pet, novelty.compliments, name,
+                    ComplimentActions(
+                        write = { vm.writeCompliments(it) },
+                        see = { vm.seeCompliment(it) },
+                        heart = { vm.heartCompliment(it) },
+                    ),
+                    onDismiss = { dailySheet = null },
+                )
+            }
+            MinuDailySheet.LOVE -> {
+                LaunchedEffect(Unit) { vm.loadMinuContent() }
+                // Mientras llegan las preguntas no hay hoja; sin conexión Minu lo dice dentro de ella
+                minuContent?.let { content ->
+                    MinuLoveQuizSheet(
+                        pet, name, content.loveQuiz,
+                        onFinish = { vm.answerLoveQuiz(it) },
                         onDismiss = { dailySheet = null },
                     )
                 }

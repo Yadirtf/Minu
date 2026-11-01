@@ -298,6 +298,60 @@ class TogetherViewModel(
     fun confirmPromise(id: String) = action { hub.confirmPromise(id) }
     fun dropPromise(id: String) = action { hub.dropPromise(id) }
 
+    // ---------- Novedad ----------
+
+    fun voteAdventure(planId: String) = action { hub.voteAdventure(planId) }
+    fun reshuffleAdventure() = action { hub.reshuffleAdventure() }
+    fun completeAdventure(song: Song?) = action { hub.completeAdventure(song) }
+    fun rateAdventure(week: String, stars: Int) = action { hub.rateAdventure(week, stars) }
+    fun uploadAdventurePhoto(week: String, jpeg: ByteArray) = action("Foto guardada en sus Recuerdos 📸") {
+        hub.uploadAdventurePhoto(week, jpeg)
+        _photos.update { it - week } // se vuelve a bajar la nueva
+    }
+    fun writeCompliments(texts: List<String>) = action { hub.writeCompliments(texts) }
+    fun seeCompliment(id: String) = action { hub.seeCompliment(id) }
+    fun heartCompliment(id: String) = action { hub.heartCompliment(id) }
+    fun answerLoveQuiz(answers: List<String>) = action { hub.answerLoveQuiz(answers) }
+
+    /** Fotos de aventuras ya bajadas, por semana (null = no hay o no se pudo). */
+    private val _photos = MutableStateFlow<Map<String, androidx.compose.ui.graphics.ImageBitmap?>>(emptyMap())
+    val photos: StateFlow<Map<String, androidx.compose.ui.graphics.ImageBitmap?>> = _photos.asStateFlow()
+    fun loadPhoto(week: String) {
+        if (week in _photos.value) return
+        _photos.update { it + (week to null) }
+        viewModelScope.launch {
+            val bytes = api.adventurePhoto(week) ?: return@launch
+            val bitmap = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Default) {
+                android.graphics.BitmapFactory.decodeByteArray(bytes, 0, bytes.size)?.let { androidx.compose.ui.graphics.asImageBitmap(it) }
+            }
+            _photos.update { it + (week to bitmap) }
+        }
+    }
+
+    /** Aventuras vividas de meses pasados (para Recuerdos), por "AAAA-MM". */
+    private val _adventures = MutableStateFlow<Map<String, List<com.daniel.reproductor.cloud.Adventure>>>(emptyMap())
+    val adventures: StateFlow<Map<String, List<com.daniel.reproductor.cloud.Adventure>>> = _adventures.asStateFlow()
+    fun loadAdventures(month: String) = viewModelScope.launch {
+        runCatching { api.adventuresOf(month) }.onSuccess { list -> _adventures.update { it + (month to list) } }
+    }
+
+    /**
+     * Ruleta de citas musicales: arma la cita del modo que salió con lo que ya tienen (dedicatorias y su
+     * canción de origen) y, si [together], invita al otro a escuchar en vivo.
+     */
+    fun playRoulette(date: com.daniel.reproductor.ui.together.minu.MusicDate, together: Boolean) = action {
+        when (date) {
+            is com.daniel.reproductor.ui.together.minu.MusicDate.Discover -> {
+                val known = hub.dedications.value.map { it.song.videoId }.toSet()
+                val songs = hub.playDiscovery(date.seed, known)
+                if (songs.isEmpty()) throw UserFacingException("No encontré canciones nuevas esta vez. ¡Gira otra vez!")
+            }
+            is com.daniel.reproductor.ui.together.minu.MusicDate.WhyThisOne -> hub.playSong(date.dedication.song)
+            is com.daniel.reproductor.ui.together.minu.MusicDate.Journey -> hub.playSongs(date.stops.map { it.song })
+        }
+        if (together) hub.inviteListen()
+    }
+
     /** Las preguntas que ya abrieron, para releerlas. */
     private val _pastQuestions = MutableStateFlow<List<DailyQuestion>?>(null)
     val pastQuestions: StateFlow<List<DailyQuestion>?> = _pastQuestions.asStateFlow()
