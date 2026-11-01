@@ -152,7 +152,7 @@ private fun TrustRow(trust: MinuTrust, partnerName: String, onOpen: (MinuDailySh
     val toThank = trust.promises.items.count { !it.mine && it.kept && !it.confirmed }
     val open = trust.promises.items.count { !it.confirmed }
     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        TrustChip("📮", if (letters > 0) "Carta de $partnerName" else "Buzón", letters > 0, Modifier.weight(1f)) { onOpen(MinuDailySheet.UNSAID) }
+        TrustChip("📮", if (letters > 0) "Carta" else "Buzón", letters > 0, Modifier.weight(1f)) { onOpen(MinuDailySheet.UNSAID) }
         TrustChip("🤞", if (toThank > 0) "¡Cumplió!" else if (open > 0) "Promesas · $open" else "Promesas", toThank > 0, Modifier.weight(1f)) { onOpen(MinuDailySheet.PROMISES) }
         TrustChip("🕊️", "Pausa", false, Modifier.weight(1f)) { onOpen(MinuDailySheet.TRUCE) }
     }
@@ -169,7 +169,10 @@ private fun TrustChip(emoji: String, label: String, attention: Boolean, modifier
         Row(Modifier.padding(horizontal = 10.dp, vertical = 9.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.Center) {
             Text(emoji, style = MaterialTheme.typography.titleSmall)
             Spacer(Modifier.width(6.dp))
-            Text(label, style = MaterialTheme.typography.labelMedium, color = if (attention) THREAD_RED else c.onSurface, maxLines = 1)
+            Text(
+                label, style = MaterialTheme.typography.labelMedium, color = if (attention) THREAD_RED else c.onSurface,
+                maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false),
+            )
             if (attention) {
                 Spacer(Modifier.width(4.dp))
                 Box(Modifier.size(7.dp).background(THREAD_RED, CircleShape))

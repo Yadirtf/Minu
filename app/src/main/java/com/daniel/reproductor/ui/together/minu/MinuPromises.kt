@@ -49,6 +49,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.drawscope.rotate
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.daniel.reproductor.cloud.MinuPet
@@ -258,13 +259,15 @@ fun KnottedThread(count: Int, modifier: Modifier = Modifier) {
             val y = wave(x)
             val last = i == visible
             val r = 7f * (if (last) 0.4f + 0.6f * pop.value else 1f)
-            // Un nudo: un lazo pequeño sobre el hilo con un brillo cálido
-            drawCircle(THREAD_RED, r * 1.15f, Offset(x, y))
-            drawCircle(WARM.copy(alpha = 0.9f), r * 0.55f, Offset(x - r * 0.25f, y - r * 0.3f))
-            drawArc(
-                THREAD_RED, 200f, 140f, false, Offset(x - r * 1.6f, y - r * 2.6f), androidx.compose.ui.geometry.Size(r * 3.2f, r * 3.2f),
-                style = Stroke(3f, cap = StrokeCap.Round),
-            )
+            // Un nudo: un lazo apretado alrededor del hilo, con su cuenta al centro
+            rotate(-35f, Offset(x, y)) {
+                drawOval(
+                    THREAD_RED, Offset(x - r * 1.5f, y - r), androidx.compose.ui.geometry.Size(r * 3f, r * 2f),
+                    style = Stroke(3f, cap = StrokeCap.Round),
+                )
+            }
+            drawCircle(THREAD_RED, r * 0.85f, Offset(x, y))
+            drawCircle(WARM.copy(alpha = 0.9f), r * 0.35f, Offset(x - r * 0.25f, y - r * 0.25f))
         }
     }
 }
