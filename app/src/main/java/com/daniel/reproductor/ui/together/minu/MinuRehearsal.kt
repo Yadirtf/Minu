@@ -48,6 +48,8 @@ class RehearsalActions(
     val load: suspend () -> List<MindRehearsalCase>,
     val readiness: suspend () -> MindReadiness,
     val run: suspend (MindRehearsalCase) -> RehearsalResult,
+    /** Pide a AICore que descargue lo necesario ahora (en el ensayo lo pide la persona a propósito). */
+    val prepare: suspend () -> Boolean = { false },
 )
 
 private val PASS = Color(0xFF2E9E5B)
@@ -86,12 +88,24 @@ fun MinuRehearsalContent(actions: RehearsalActions) {
         Text(
             when (readiness) {
                 MindReadiness.READY -> "Este celular puede redactar. Prueba cada situación y revisa cómo suena."
-                MindReadiness.DOWNLOADABLE, MindReadiness.PREPARING -> "Este celular se está preparando (con Wi-Fi). Vuelve en un rato."
+                MindReadiness.DOWNLOADABLE -> "Este celular puede redactar, pero primero necesita prepararse."
+                MindReadiness.PREPARING -> "Preparando este celular… puede tardar unos minutos. Puedes cerrar y volver."
                 MindReadiness.UNAVAILABLE -> "Este celular no puede redactar: aquí Minu habla con su banco de frases."
                 null -> "Revisando este celular…"
             },
             style = MaterialTheme.typography.bodyMedium, color = c.onSurfaceVariant,
         )
+        if (readiness == MindReadiness.DOWNLOADABLE) {
+            PillButton(
+                "Preparar este celular", Icons.Default.PlayArrow,
+                {
+                    readiness = MindReadiness.PREPARING
+                    scope.launch { actions.prepare(); readiness = actions.readiness() }
+                },
+                Modifier.padding(top = 10.dp),
+            )
+            Text("Es una descarga grande: mejor con Wi-Fi y el celular cargando.", style = MaterialTheme.typography.labelMedium, color = c.onSurfaceVariant)
+        }
         val list = cases
         val passed = results.values.count { it.verdict?.ok == true }
         Row(Modifier.padding(vertical = 10.dp)) {

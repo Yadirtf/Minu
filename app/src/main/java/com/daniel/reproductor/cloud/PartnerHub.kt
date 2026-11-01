@@ -211,6 +211,7 @@ class PartnerHub(
     suspend fun mindRehearsal() = api.mindRehearsal()
     suspend fun checkMindLine(text: String) = api.checkMindLine(text)
     suspend fun mindReadiness() = mind.readiness()
+    suspend fun prepareMind() = mind.prepare()
     /** Para el ensayo: redacta sin guardar nada. */
     suspend fun rehearse(prompt: String) = mind.write(prompt)
 

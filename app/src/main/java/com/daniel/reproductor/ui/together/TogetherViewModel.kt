@@ -323,6 +323,7 @@ class TogetherViewModel(
     val rehearsal = com.daniel.reproductor.ui.together.minu.RehearsalActions(
         load = { hub.mindRehearsal() },
         readiness = { hub.mindReadiness() },
+        prepare = { hub.prepareMind() },
         run = { case ->
             val start = System.currentTimeMillis()
             val raw = hub.rehearse(case.prompt)
