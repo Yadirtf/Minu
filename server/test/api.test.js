@@ -817,3 +817,122 @@ test('Minu: confianza y reparación (Buzón, Tregua, Promesas y cuidado)', async
     fakeNow = null;
   }
 });
+
+test('Minu: novedad (Aventura de la semana, Cumplidos a ciegas y lenguajes del amor)', async () => {
+  const a = (await register('minu_vale')).body.token;
+  const b = (await register('minu_juan')).body.token;
+  await api('POST', '/partner/request', { username: 'minu_juan' }, a);
+  await api('POST', '/partner/accept', null, b);
+  const minuOf = async (token) => (await api('GET', '/duo', null, token)).body.minu;
+  try {
+    fakeNow = new Date('2026-11-11T15:00:00Z'); // miércoles
+    assert.equal((await api('POST', '/duo/adventure/vote', { planId: 'a001' }, a)).status, 403);
+    await api('POST', '/duo/terms/accept', null, a);
+    let duo = (await api('POST', '/duo/terms/accept', null, b)).body;
+    let adv = duo.minu.novelty.adventure;
+    assert.equal(adv.week, '2026-11-09');
+    assert.deepEqual(adv.options.map((o) => o.kind), ['home', 'out', 'create']);
+    assert.equal(adv.chosen, null);
+    assert.equal(adv.canReshuffle, true);
+    assert.deepEqual(duo.minu.novelty.love, { mine: false, partner: false, suggestion: null });
+    const born = duo.minu.pet.energy;
+
+    // Otras propuestas: una vez, y cambian los planes
+    duo = (await api('POST', '/duo/adventure/reshuffle', null, a)).body;
+    const options = duo.minu.novelty.adventure.options;
+    assert.notDeepEqual(options.map((o) => o.id), adv.options.map((o) => o.id));
+    assert.equal((await api('POST', '/duo/adventure/reshuffle', null, a)).status, 409);
+
+    // Votos: se elige cuando coinciden
+    assert.equal((await api('POST', '/duo/adventure/vote', { planId: 'nope' }, a)).status, 400);
+    duo = (await api('POST', '/duo/adventure/vote', { planId: options[0].id }, a)).body;
+    assert.equal(duo.minu.novelty.adventure.myVote, options[0].id);
+    duo = (await api('POST', '/duo/adventure/vote', { planId: options[1].id }, b)).body;
+    assert.equal(duo.minu.novelty.adventure.partnerVote, options[0].id);
+    assert.equal(duo.minu.novelty.adventure.chosen, null);
+    pushes.length = 0;
+    duo = (await api('POST', '/duo/adventure/vote', { planId: options[0].id }, b)).body;
+    adv = duo.minu.novelty.adventure;
+    assert.equal(adv.chosen.id, options[0].id);
+    assert.deepEqual(adv.options, []);
+    assert.ok(pushes.some((p) => p.data.type === 'minu.adventure.chosen'));
+
+    // Foto (JPEG) y completar con canción: +25 y a Recuerdos
+    const jpeg = Buffer.concat([Buffer.from([0xff, 0xd8, 0xff, 0xe0]), Buffer.alloc(400, 7)]);
+    const put = await fetch(`${base}/duo/adventures/${adv.week}/photo`, { method: 'PUT', headers: { 'content-type': 'image/jpeg', authorization: `Bearer ${a}` }, body: jpeg });
+    assert.equal(put.status, 200);
+    const bad = await fetch(`${base}/duo/adventures/${adv.week}/photo`, { method: 'PUT', headers: { 'content-type': 'image/jpeg', authorization: `Bearer ${a}` }, body: Buffer.alloc(400, 1) });
+    assert.equal(bad.status, 400);
+    const got = await fetch(`${base}/duo/adventures/${adv.week}/photo`, { headers: { authorization: `Bearer ${b}` } });
+    assert.equal(got.status, 200);
+    assert.deepEqual(Buffer.from(await got.arrayBuffer()), jpeg);
+    const song = { videoId: 'dQw4w9WgXcQ', title: 'Nuestra canción', uploader: 'Alguien', durationSec: 200, thumbnailUrl: '' };
+    duo = (await api('POST', '/duo/adventure/done', { song }, b)).body;
+    adv = duo.minu.novelty.adventure;
+    assert.equal(adv.done, true);
+    assert.equal(adv.hasPhoto, true);
+    assert.equal(adv.song.title, 'Nuestra canción');
+    assert.equal(duo.minu.pet.energy, born + 25);
+    duo = (await api('POST', '/duo/adventure/done', null, a)).body;
+    assert.equal(duo.minu.pet.energy, born + 25); // una sola vez
+    assert.equal((await api('POST', `/duo/adventures/${adv.week}/rate`, { stars: 9 }, a)).status, 400);
+    duo = (await api('POST', `/duo/adventures/${adv.week}/rate`, { stars: 5 }, a)).body;
+    assert.equal(duo.minu.novelty.adventure.myRating, 5);
+    const month = (await api('GET', '/duo/adventures?month=2026-11', null, b)).body.items;
+    assert.equal(month.length, 1);
+    assert.equal(month[0].partnerRating, 5);
+
+    // La semana siguiente: planes nuevos, sin repetir los ya vistos
+    fakeNow = new Date('2026-11-16T15:00:00Z');
+    const next = (await minuOf(a)).novelty.adventure;
+    assert.equal(next.week, '2026-11-16');
+    const seen = new Set([...adv.options.map((o) => o.id), ...options.map((o) => o.id)]);
+    assert.ok(next.options.every((o) => !seen.has(o.id)));
+
+    // Cumplidos a ciegas: el otro no ve nada hasta el día de la sorpresa
+    assert.equal((await api('POST', '/duo/compliments', { texts: ['Tu risa', 'Tu paciencia'] }, a)).status, 400);
+    pushes.length = 0;
+    duo = (await api('POST', '/duo/compliments', { texts: ['Tu risa', 'Tu paciencia', 'Cómo cuidas a tu familia'] }, a)).body;
+    assert.equal(duo.minu.novelty.compliments.pending, 3);
+    assert.equal(duo.minu.novelty.compliments.askNew, false);
+    assert.equal(pushes.length, 0); // es sorpresa
+    assert.equal((await api('POST', '/duo/compliments', { texts: ['x', 'y', 'z'] }, a)).status, 409);
+    let praise = (await minuOf(b)).novelty.compliments;
+    assert.deepEqual(praise.received, []);
+    assert.ok(praise.nextOn > '2026-11-16' && praise.nextOn <= '2026-11-23');
+    assert.equal(JSON.stringify(praise).includes('risa'), false);
+    fakeNow = new Date(`${praise.nextOn}T15:00:00Z`);
+    praise = (await minuOf(b)).novelty.compliments;
+    assert.equal(praise.received.length, 1);
+    const [first] = praise.received;
+    assert.equal(first.seen, false);
+    assert.equal(first.fromName, 'minu_vale');
+    const before = (await minuOf(b)).pet.energy;
+    duo = (await api('POST', `/duo/compliments/${first.id}/heart`, null, b)).body;
+    assert.equal(duo.minu.novelty.compliments.received[0].heart, true);
+    assert.equal(duo.minu.pet.energy, before + 5);
+    assert.equal((await api('POST', `/duo/compliments/${first.id}/heart`, null, b)).status, 409);
+    assert.equal((await minuOf(a)).novelty.compliments.delivered[0].heart, true);
+
+    // Lenguajes del amor: solo sugerencias, nunca una etiqueta
+    const quiz = (await api('GET', '/minu/content', null, a)).body.loveQuiz;
+    assert.equal(quiz.length, 10);
+    assert.equal((await api('POST', '/duo/love', { answers: ['touch'] }, b)).status, 400);
+    duo = (await api('POST', '/duo/love', { answers: quiz.map((q) => q.b.lang) }, b)).body;
+    assert.deepEqual({ mine: duo.minu.novelty.love.mine, partner: duo.minu.novelty.love.partner }, { mine: true, partner: false });
+    const love = (await minuOf(a)).novelty.love;
+    assert.equal(love.partner, true);
+    assert.equal(typeof love.suggestion, 'string');
+    assert.equal(JSON.stringify(love).match(/touch|words|gifts|service|weights/), null);
+
+    // Borrar mis datos se lleva mis cumplidos y mi test
+    await api('DELETE', '/duo/minu/data', null, b);
+    await api('POST', '/duo/terms/accept', null, b);
+    assert.equal((await minuOf(a)).novelty.love.partner, false);
+    await api('DELETE', '/duo/minu/data', null, a);
+    await api('POST', '/duo/terms/accept', null, a);
+    assert.deepEqual((await minuOf(b)).novelty.compliments.received, []);
+  } finally {
+    fakeNow = null;
+  }
+});

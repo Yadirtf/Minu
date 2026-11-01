@@ -8,7 +8,7 @@ import { coupleMemory } from './db.js';
  * Nunca entra aquí lo que se cuenta en espacios de reparación (Buzón, Tregua). Cada hecho guarda quién
  * lo aportó para poder borrarlo cuando esa persona borre sus datos.
  */
-export const MEMORY_KINDS = ['answer', 'thanks', 'news', 'song'];
+export const MEMORY_KINDS = ['answer', 'thanks', 'news', 'song', 'adventure', 'compliment'];
 
 /**
  * Guarda un hecho. Idempotente por (kind, ref): el mismo hecho no se duplica si la llamada se repite.

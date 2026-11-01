@@ -1,4 +1,8 @@
 import { HELP_LINES } from './care.js';
+import { LOVE_QUIZ } from './novelty-content.js';
+import { seeded } from './seed.js';
+
+export { seeded };
 /**
  * Banco de contenido de Minu: preguntas del día, gestos del Toque y frases de respuesta entusiasta.
  * Vive en el servidor para poder crecer sin publicar otra APK. Cada pregunta tiene un id estable (no se
@@ -207,15 +211,6 @@ export const QUESTIONS = [...make('l', 'light', light), ...make('p', 'personal',
 const STAGE_ORDER = ['baby', 'young', 'adult', 'wise'];
 const reached = (stage, min) => STAGE_ORDER.indexOf(stage) >= STAGE_ORDER.indexOf(min);
 
-/** Número pseudoaleatorio estable a partir de un texto: los dos ven lo mismo el mismo día. */
-export function seeded(text) {
-  let h = 2166136261;
-  for (const ch of text) h = Math.imul(h ^ ch.codePointAt(0), 16777619) >>> 0;
-  return () => {
-    h = (Math.imul(h, 1103515245) + 12345) >>> 0;
-    return h / 2 ** 32;
-  };
-}
 
 /**
  * Motor de variedad (versión 1): elige una pregunta que la pareja no haya visto en los últimos 12 meses,
@@ -297,5 +292,6 @@ export function contentBundle() {
     repairs: REPAIR_PHRASES,
     unsaidStarters: UNSAID_STARTERS,
     help: HELP_LINES,
+    loveQuiz: LOVE_QUIZ.map((q) => ({ id: q.id, a: q.a, b: q.b })),
   };
 }
