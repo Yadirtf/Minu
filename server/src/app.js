@@ -5,6 +5,9 @@ import { requireAuth, signToken } from './auth.js';
 import { chooseRescue, giveUpRescue, markDedication, refreshStreak, RESCUE_TYPES, streakView, validTimeZone } from './duo.js';
 import { anniversariesView, anniversaryView, hug, openSolo, sealedLetters, voteSong, writeLetter } from './anniversary.js';
 import { answerCapsule, dedicationDays, ensureCapsule, joinedOn, missionsView, mixtape, markMission, openedCapsules, serializeCapsule } from './memories.js';
+import { minuState } from './minu.js';
+import { registerMinuRoutes } from './minuRoutes.js';
+import { recordPetEvent } from './pet.js';
 
 const USERNAME = /^[a-z0-9_.]{3,24}$/;
 const EMOJIS = new Set(['❤️', '😍', '🔥', '😘', '💃', '🎶']);
@@ -203,6 +206,7 @@ export function createApp(db, config, realtime, services = {}) {
     // La primera dedicatoria del día de cada uno es su mitad de la racha
     const day = await markDedication(db, me._id, me.partnerId, clock());
     if (day.blocked) return fail(res, 409, 'Hoy toca salvar el hilo con un reto: las dedicatorias vuelven mañana.');
+    await recordPetEvent(db, day.key, 'dedication', { day: day.today, by: me._id, now: clock() });
     const dedication = {
       from: me._id,
       to: me.partnerId,
@@ -348,6 +352,11 @@ export function createApp(db, config, realtime, services = {}) {
     const month = Number(req.params.month);
     if (!Number.isInteger(month) || month < 1 || month > 1200) return fail(res, 400, 'Mes inválido.');
     await markMission(db, me, month, req.body?.done !== false);
+    const afterMark = await couples(db).findOne({ _id: coupleKey(me._id, me.partnerId) });
+    if ((afterMark?.missions?.[month] ?? []).length >= 2) {
+      const { today } = await refreshStreak(db, me._id, me.partnerId, clock());
+      await recordPetEvent(db, afterMark._id, 'mission', { day: today, ref: String(month), perDay: false, now: clock() });
+    }
     if (!realtime.notify(me.partnerId, { type: 'duo.update' }) && req.body?.done !== false) {
       await push.send(me.partnerId, { type: 'mission.done', fromName: me.displayName });
     }
@@ -457,6 +466,8 @@ export function createApp(db, config, realtime, services = {}) {
     res.json(await duoState(db, me, clock()));
   });
 
+  registerMinuRoutes(app, { db, auth, realtime, push, clock, fail, duoState });
+
   app.use((err, _req, res, _next) => {
     if (err.type === 'entity.too.large') return fail(res, 413, 'Los datos son demasiado grandes.');
     if (err.type === 'entity.parse.failed') return fail(res, 400, 'JSON inválido.');
@@ -495,7 +506,7 @@ export async function partnerStatus(db, me, realtime) {
   return { status: 'none', partner: null };
 }
 
-async function duoState(db, me, now = new Date()) {
+export async function duoState(db, me, now = new Date()) {
   const streak = await streakView(db, me, now);
   const couple = await couples(db).findOne({ _id: coupleKey(me._id, me.partnerId) });
   const o = couple?.origin;
@@ -520,6 +531,8 @@ async function duoState(db, me, now = new Date()) {
     anniversaries: anniversariesView(couple, streak.today, joined),
     letter: await sealedLetters(db, me, now),
     streak,
+    // Minu, la mascota: términos de privacidad y, si los dos aceptaron, su estado
+    minu: await minuState(db, couple, me, streak.today, joined),
   };
 }
 

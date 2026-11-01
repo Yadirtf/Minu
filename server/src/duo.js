@@ -1,4 +1,5 @@
 import { capsules, coupleKey, couples, streakDays } from './db.js';
+import { recordPetEvent } from './pet.js';
 
 /** Rescates por mes. El día 1 vuelven a ser exactamente estos: no se acumulan. */
 export const MONTHLY_RESCUES = 3;
@@ -181,6 +182,7 @@ export async function addListening(db, a, b, seconds, now = new Date()) {
     return false;
   }
   await couples(db).updateOne({ _id: key }, { $set: { streak: completeRescue(couple.streak) } });
+  await recordPetEvent(db, key, 'rescue', { day: today, now });
   return true;
 }
 
