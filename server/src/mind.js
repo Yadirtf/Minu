@@ -149,7 +149,7 @@ export function buildPrompt({ pet, facts, situation, kind }) {
     ...(facts.length ? facts : ['Todavía los estoy conociendo.']).map((f) => `- ${f}`),
     ...situation.map((s) => `- ${s}`),
     '',
-    'Así hablo (ejemplos de tono, no los copies):',
+    'Así hablo (solo copia el tono: lo que cuentan estos ejemplos no les pasó a ustedes):',
     ...recipe.examples.map((e) => `- ${e}`),
     '',
     `Encargo: ${recipe.ask}`,
