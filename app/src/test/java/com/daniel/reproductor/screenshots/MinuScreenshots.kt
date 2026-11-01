@@ -69,6 +69,7 @@ import com.daniel.reproductor.cloud.MinuMindInfo
 import com.daniel.reproductor.ui.together.minu.LearningConstellation
 import com.daniel.reproductor.ui.together.minu.MindHouseCard
 import com.daniel.reproductor.ui.together.minu.MindLineCard
+import com.daniel.reproductor.ui.together.minu.MindThinkingCard
 import com.daniel.reproductor.ui.together.minu.MinuWakeContent
 import com.github.takahirom.roborazzi.captureRoboImage
 import org.junit.Rule
@@ -331,7 +332,7 @@ class MinuScreenshots {
 
     private fun mind(awake: Boolean, learned: Int = 30, line: MindLine? = null, mineOn: Boolean = true, partnerOn: Boolean = true) = MinuMindInfo(
         awake = awake, wakesOn = "2026-12-01", daysLeft = if (awake) 0 else 30 - learned, learned = learned, learnTotal = 30,
-        mineOn = mineOn, partnerOn = partnerOn, enabled = mineOn && partnerOn, celebrate = awake, line = line, task = null,
+        mineOn = mineOn, partnerOn = partnerOn, enabled = mineOn && partnerOn, celebrate = awake, line = line, writing = false,
     )
 
     /** La tarjeta con el mensaje del día, la cuenta regresiva, la casita y la celebración del despertar. */
@@ -347,6 +348,7 @@ class MinuScreenshots {
                     Column(Modifier.width(400.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
                         MinuEntry(MinuInfo(MinuTerms(1, true, true, false), pet, daily, null, null, mind(true, line = cheer)), "Ana", {}, {})
                         MindLineCard(dedication, onDedicate = {}, animate = false)
+                        MindThinkingCard("Minu")
                         MinuEntry(MinuInfo(MinuTerms(1, true, true, false), pet, daily, null, null, mind(false, learned = 18)), "Ana", {}, {})
                     }
                     Column(Modifier.width(400.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {

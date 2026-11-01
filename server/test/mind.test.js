@@ -117,3 +117,31 @@ test('barandas: rechaza cómo funciona, Buzón, culpa, temas médicos, inglés, 
     for (const t of texts) assert.equal(guardLine(t).reason, reason, t);
   }
 });
+
+test('redactor: habla con cualquier API compatible con OpenAI y nunca lanza', async () => {
+  const { createMindWriter, mindWriterFromEnv, MIND_DEFAULTS } = await import('../src/mind-writer.js');
+  assert.equal(createMindWriter({}), null); // sin llave: banco de frases
+  assert.equal(mindWriterFromEnv({}), null);
+  assert.equal(mindWriterFromEnv({ MIND_API_KEY: 'k' }).model, MIND_DEFAULTS.model);
+  const calls = [];
+  const ok = createMindWriter({
+    apiKey: 'llave', baseUrl: 'https://api.ejemplo.com/v1/',
+    fetchImpl: async (url, init) => {
+      calls.push({ url, init, body: JSON.parse(init.body) });
+      return { ok: true, json: async () => ({ choices: [{ message: { content: 'Hola a los dos' } }] }) };
+    },
+  });
+  assert.equal(await ok.write('Encargo'), 'Hola a los dos');
+  assert.equal(calls[0].url, 'https://api.ejemplo.com/v1/chat/completions');
+  assert.equal(calls[0].init.headers.authorization, 'Bearer llave');
+  assert.equal(calls[0].body.model, 'openai/gpt-oss-120b');
+  assert.equal(calls[0].body.reasoning_effort, 'low');
+  assert.equal(calls[0].body.messages[1].content, 'Encargo');
+  const other = createMindWriter({ apiKey: 'k', model: 'llama-3.3-70b', fetchImpl: async (u, init) => (calls.push({ body: JSON.parse(init.body) }), { ok: false, status: 429 }) });
+  assert.equal(await other.write('x'), null); // cuota agotada: null, sin lanzar
+  assert.equal(calls.at(-1).body.reasoning_effort, undefined);
+  const broken = createMindWriter({ apiKey: 'k', fetchImpl: async () => { throw new Error('sin red'); } });
+  assert.equal(await broken.write('x'), null);
+  const empty = createMindWriter({ apiKey: 'k', fetchImpl: async () => ({ ok: true, json: async () => ({ choices: [] }) }) });
+  assert.equal(await empty.write('x'), null);
+});

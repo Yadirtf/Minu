@@ -34,29 +34,37 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.daniel.reproductor.cloud.MindRehearsal
 import com.daniel.reproductor.cloud.MindRehearsalCase
-import com.daniel.reproductor.cloud.MindVerdict
-import com.daniel.reproductor.minu.MindReadiness
 import com.daniel.reproductor.ui.components.PillButton
 import kotlinx.coroutines.launch
 
-/** Lo que salió en una situación del ensayo: el texto redactado y si pasó las barandas. */
-data class RehearsalResult(val raw: String?, val verdict: MindVerdict?, val ms: Long)
-
-/** Cómo corre el ensayo: lo da TogetherViewModel (redactar dentro del celular y revisar en el servidor). */
+/** Cómo corre el ensayo: lo da TogetherViewModel (el servidor redacta y revisa, sin guardar). */
 class RehearsalActions(
     val load: suspend () -> List<MindRehearsalCase>,
-    val readiness: suspend () -> MindReadiness,
-    val run: suspend (MindRehearsalCase) -> RehearsalResult,
-    /** Pide a AICore que descargue lo necesario ahora (en el ensayo lo pide la persona a propósito). */
-    val prepare: suspend () -> Boolean = { false },
+    val run: suspend (MindRehearsalCase) -> MindRehearsal,
 )
 
 private val PASS = Color(0xFF2E9E5B)
 
+/** Qué quiere decir cada motivo de las barandas, en palabras. */
+private fun reasonText(reason: String?) = when (reason) {
+    "banned" -> "dijo algo que Minu no dice"
+    "language" -> "no salió en español"
+    "care" -> "sonó a riesgo"
+    "short" -> "muy corto"
+    "long" -> "muy largo"
+    "link" -> "traía un enlace"
+    "leak" -> "copió parte del encargo"
+    "empty" -> "el servicio no respondió"
+    "no_writer" -> "falta la llave del servicio en el servidor"
+    null -> "sin revisar"
+    else -> reason
+}
+
 /**
  * El ensayo de las 30 situaciones (#58/#59): se abre con siete toques a la constelación de la casita. Sirve
- * para revisar a mano, en un celular compatible, cómo suena Minu y qué atrapan las barandas. No guarda nada.
+ * para revisar a mano cómo suena Minu y qué atrapan las barandas. No guarda nada.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -71,48 +79,26 @@ fun MinuRehearsalContent(actions: RehearsalActions) {
     val c = MaterialTheme.colorScheme
     val scope = rememberCoroutineScope()
     var cases by remember { mutableStateOf<List<MindRehearsalCase>?>(null) }
-    var readiness by remember { mutableStateOf<MindReadiness?>(null) }
-    val results = remember { mutableStateMapOf<String, RehearsalResult>() }
+    val results = remember { mutableStateMapOf<String, MindRehearsal>() }
     var running by remember { mutableStateOf<String?>(null) }
-    LaunchedEffect(Unit) {
-        readiness = actions.readiness()
-        cases = runCatching { actions.load() }.getOrDefault(emptyList())
-    }
+    LaunchedEffect(Unit) { cases = runCatching { actions.load() }.getOrDefault(emptyList()) }
     suspend fun run(case: MindRehearsalCase) {
         running = case.id
-        results[case.id] = actions.run(case)
+        runCatching { actions.run(case) }.onSuccess { results[case.id] = it }
         running = null
     }
     Column(Modifier.fillMaxWidth().fillMaxHeight(0.92f).navigationBarsPadding().padding(horizontal = 20.dp)) {
         Text("Ensayo de Minu", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
         Text(
-            when (readiness) {
-                MindReadiness.READY -> "Este celular puede redactar. Prueba cada situación y revisa cómo suena."
-                MindReadiness.DOWNLOADABLE -> "Este celular puede redactar, pero primero necesita prepararse."
-                MindReadiness.PREPARING -> "Preparando este celular… puede tardar unos minutos. Puedes cerrar y volver."
-                MindReadiness.UNAVAILABLE -> "Este celular no puede redactar: aquí Minu habla con su banco de frases."
-                null -> "Revisando este celular…"
-            },
+            "Prueba cada situación y revisa cómo suena. Usa la cuota diaria del servicio, así que no hace falta repetirlas mucho.",
             style = MaterialTheme.typography.bodyMedium, color = c.onSurfaceVariant,
         )
-        if (readiness == MindReadiness.DOWNLOADABLE) {
-            PillButton(
-                "Preparar este celular", Icons.Default.PlayArrow,
-                {
-                    readiness = MindReadiness.PREPARING
-                    scope.launch { actions.prepare(); readiness = actions.readiness() }
-                },
-                Modifier.padding(top = 10.dp),
-            )
-            Text("Es una descarga grande: mejor con Wi-Fi y el celular cargando.", style = MaterialTheme.typography.labelMedium, color = c.onSurfaceVariant)
-        }
         val list = cases
-        val passed = results.values.count { it.verdict?.ok == true }
+        val passed = results.values.count { it.ok }
         Row(Modifier.padding(vertical = 10.dp)) {
             PillButton(
                 if (running != null) "Probando…" else "Probar las ${list?.size ?: 30}", Icons.Default.PlayArrow,
                 { if (running == null && list != null) scope.launch { list.forEach { run(it) } } },
-                primary = readiness == MindReadiness.READY,
             )
             Spacer(Modifier.weight(1f))
             if (results.isNotEmpty()) Text("$passed de ${results.size} pasaron", style = MaterialTheme.typography.labelLarge, modifier = Modifier.padding(top = 10.dp))
@@ -128,7 +114,7 @@ fun MinuRehearsalContent(actions: RehearsalActions) {
 }
 
 @Composable
-private fun RehearsalRow(case: MindRehearsalCase, result: RehearsalResult?, running: Boolean, onRun: () -> Unit) {
+private fun RehearsalRow(case: MindRehearsalCase, result: MindRehearsal?, running: Boolean, onRun: () -> Unit) {
     val c = MaterialTheme.colorScheme
     Surface(color = c.surfaceContainerHigh, shape = RoundedCornerShape(16.dp)) {
         Column(Modifier.fillMaxWidth().padding(12.dp)) {
@@ -139,18 +125,10 @@ private fun RehearsalRow(case: MindRehearsalCase, result: RehearsalResult?, runn
             Text(case.facts.joinToString(" ").ifBlank { "(sin recuerdos aún)" }, style = MaterialTheme.typography.bodySmall, color = c.onSurfaceVariant)
             result?.let { r ->
                 Spacer(Modifier.height(6.dp))
-                val ok = r.verdict?.ok == true
+                Text(r.text ?: r.raw ?: "(no redactó nada)", style = MaterialTheme.typography.bodyMedium)
                 Text(
-                    r.verdict?.text ?: r.raw ?: "(no redactó nada)",
-                    style = MaterialTheme.typography.bodyMedium,
-                )
-                Text(
-                    when {
-                        r.raw == null -> "Sin texto: aquí hablaría el banco · ${r.ms} ms"
-                        ok -> "Pasa las barandas · ${r.ms} ms"
-                        else -> "No pasa (${r.verdict?.reason ?: "sin revisar"}) · ${r.ms} ms"
-                    },
-                    style = MaterialTheme.typography.labelMedium, color = if (ok) PASS else c.error,
+                    if (r.ok) "Pasa las barandas · ${r.ms} ms" else "No pasa: ${reasonText(r.reason)} · ${r.ms} ms",
+                    style = MaterialTheme.typography.labelMedium, color = if (r.ok) PASS else c.error,
                 )
             }
         }

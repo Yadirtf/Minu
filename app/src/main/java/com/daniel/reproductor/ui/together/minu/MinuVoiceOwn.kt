@@ -43,6 +43,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.PathMeasure
@@ -206,6 +207,34 @@ fun MindLineCard(line: MindLine, onDedicate: () -> Unit, modifier: Modifier = Mo
     }
 }
 
+/**
+ * Mientras el mensaje de hoy se escribe (unos segundos): Minu "piensa" con tres puntitos que respiran y una
+ * estrella que titila. Llega solo, por tiempo real, y entonces se escribe letra por letra.
+ */
+@Composable
+fun MindThinkingCard(petName: String, modifier: Modifier = Modifier) {
+    val c = MaterialTheme.colorScheme
+    val inf = rememberInfiniteTransition(label = "pensando")
+    val t by inf.animateFloat(0f, 1f, infiniteRepeatable(tween(1200, easing = LinearEasing)), label = "puntos")
+    Surface(color = c.surfaceContainerHigh, shape = RoundedCornerShape(20.dp), modifier = modifier.fillMaxWidth()) {
+        Row(Modifier.padding(horizontal = 16.dp, vertical = 14.dp), verticalAlignment = Alignment.CenterVertically) {
+            LearningConstellation(30, 30, 1f, Modifier.width(40.dp), night = true)
+            Spacer(Modifier.width(12.dp))
+            Text("$petName está pensando en ustedes", style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f, fill = false))
+            Spacer(Modifier.width(6.dp))
+            repeat(3) { i ->
+                val phase = ((t - i * 0.18f) % 1f + 1f) % 1f
+                val lift = sin(phase * PI).toFloat().coerceAtLeast(0f)
+                Box(
+                    Modifier.padding(horizontal = 2.dp).size(6.dp)
+                        .graphicsLayer { translationY = -6f * lift; alpha = 0.35f + 0.65f * lift }
+                        .background(THREAD_RED, androidx.compose.foundation.shape.CircleShape),
+                )
+            }
+        }
+    }
+}
+
 /** Mientras aprende: una mini constelación y la cuenta regresiva en su voz. */
 @Composable
 fun LearningRow(mind: MinuMindInfo, petName: String, modifier: Modifier = Modifier) {
@@ -253,7 +282,7 @@ fun MindHouseCard(mind: MinuMindInfo, pet: MinuPet, partnerName: String, onToggl
                         when {
                             !mind.mineOn -> "Apagados. Si los enciendes y $partnerName también, vuelvo a escribirles."
                             !mind.partnerOn -> "Están en pausa porque $partnerName los apagó. Tú los tienes encendidos."
-                            else -> "Se redactan dentro de su celular con lo que comparten aquí. Nunca leo el Buzón."
+                            else -> "Los escribo con lo que comparten aquí. Nunca leo el Buzón ni la Tregua."
                         },
                         style = MaterialTheme.typography.bodySmall, color = c.onSurfaceVariant,
                     )

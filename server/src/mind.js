@@ -10,10 +10,10 @@ import {
 } from './mind-content.js';
 
 /**
- * Minu aprende de ustedes (capa 3). El servidor no redacta nada: arma el encargo (personalidad + lo que
- * Minu sabe de la pareja + la situación de hoy) y el celular de uno de los dos lo redacta por dentro. El
- * texto vuelve aquí, pasa las barandas y queda como el mensaje del día de los dos. Si nada pasa, Minu
- * habla con su banco de frases y nadie nota la diferencia.
+ * Minu aprende de ustedes (capa 3). El servidor arma el encargo (personalidad + lo que Minu sabe de la
+ * pareja + la situación de hoy), lo manda al redactor configurado (mind-writer.js), revisa el texto con
+ * las barandas y lo guarda como el mensaje del día de los dos. Si nada pasa, Minu habla con su banco de
+ * frases y nadie nota la diferencia.
  */
 
 const isDuplicate = (e) => e?.code === 11000;
@@ -202,11 +202,79 @@ export function guardLine(raw) {
   return { ok: true, text };
 }
 
+// ---------- Redacción (en el servidor, en segundo plano) ----------
+
+/**
+ * Quién redacta y a quién avisar cuando hay mensaje nuevo. Lo configura createApp una vez (con la llave
+ * del proveedor); sin redactor, Minu habla siempre con su banco de frases y nadie nota la diferencia.
+ */
+const mindConfig = { writer: null, notify: () => {} };
+const inFlight = new Map();
+
+export function configureMind({ writer = null, notify = () => {} } = {}) {
+  mindConfig.writer = writer;
+  mindConfig.notify = notify;
+}
+
+/** Espera a que terminen las redacciones en curso (para las pruebas y un apagado ordenado). */
+export async function mindIdle() {
+  await Promise.allSettled([...inFlight.values()]);
+}
+
+/**
+ * Redacta el mensaje del día de la pareja: hasta ATTEMPTS_PER_DAY intentos, cada uno revisado por las
+ * barandas. El primero que pasa queda para los dos. Devuelve true si quedó un mensaje.
+ */
+export async function composeLine(db, writer, { couple, today, joinedOn, pet, adventure, now = new Date() }) {
+  const id = `${couple._id}:${today}`;
+  const facts = await ensureDigest(db, couple, joinedOn, today, now);
+  const situation = situationOf({ couple, today, adventure });
+  for (;;) {
+    const doc = await mindLines(db).findOne({ _id: id });
+    if (doc?.text) return true;
+    const attempt = doc?.attempts ?? 0;
+    if (attempt >= ATTEMPTS_PER_DAY) return false;
+    const kind = pickKind(`${couple._id}:${today}:${attempt}`, pet?.mood);
+    const raw = await writer.write(buildPrompt({ pet, facts, situation, kind }));
+    const verdict = raw ? guardLine(raw) : { ok: false, reason: 'empty' };
+    if (!verdict.ok) {
+      await mindLines(db).updateOne(
+        { _id: id },
+        { $inc: { attempts: 1 }, $push: { rejected: verdict.reason }, $setOnInsert: { couple: couple._id, day: today } },
+        { upsert: true },
+      );
+      continue;
+    }
+    try {
+      await mindLines(db).updateOne(
+        { _id: id, text: null },
+        { $set: { couple: couple._id, day: today, kind, text: verdict.text, at: now } },
+        { upsert: true },
+      );
+    } catch (e) {
+      if (!isDuplicate(e)) throw e;
+    }
+    return true;
+  }
+}
+
+/** Lanza la redacción de hoy si no hay una en curso para esta pareja; avisa a los dos al terminar. */
+function composeSoon(db, args) {
+  const key = `${args.couple._id}:${args.today}`;
+  if (inFlight.has(key) || !mindConfig.writer) return;
+  const job = composeLine(db, mindConfig.writer, args)
+    .then((ok) => { if (ok) mindConfig.notify(args.couple.members ?? []); })
+    .catch((e) => console.warn(`[minu] no se pudo redactar: ${e?.message ?? e}`))
+    .finally(() => inFlight.delete(key));
+  inFlight.set(key, job);
+}
+
 // ---------- Estado y acciones ----------
 
 /**
  * Lo que la app ve de la voz de Minu: si ya despertó (o cuánto falta), si los mensajes personalizados
- * están encendidos para los dos, el mensaje de hoy y, si aún no hay, el encargo para redactarlo.
+ * están encendidos para los dos y el mensaje de hoy. Si aún no hay, lo empieza a redactar en segundo
+ * plano ([writing]) y avisa por tiempo real cuando esté.
  */
 export async function mindView(db, couple, me, today, joinedOn, pet, { adventure = null, now = new Date() } = {}) {
   const wakesOn = wakeDay(joinedOn);
@@ -219,53 +287,16 @@ export async function mindView(db, couple, me, today, joinedOn, pet, { adventure
   const learned = joinedOn ? Math.min(learnTotal, Math.max(0, daysBetween(joinedOn, today))) : 0;
   const base = {
     awake, wakesOn, daysLeft: awake || !wakesOn ? 0 : daysBetween(today, wakesOn), learned, learnTotal,
-    mineOn, partnerOn, enabled, celebrate: false, line: null, task: null,
+    mineOn, partnerOn, enabled, celebrate: false, line: null, writing: false,
   };
   if (!awake || !enabled) return base;
 
   const doc = await mindLines(db).findOne({ _id: `${couple._id}:${today}` });
   const line = doc?.text ? { day: today, kind: doc.kind, text: doc.text } : null;
   const celebrate = !couple.mind?.woke?.[String(me._id)];
-  let task = null;
-  if (!line && (doc?.attempts ?? 0) < ATTEMPTS_PER_DAY) {
-    const kind = pickKind(`${couple._id}:${today}:${doc?.attempts ?? 0}`, pet?.mood);
-    const facts = await ensureDigest(db, couple, joinedOn, today, now);
-    task = { day: today, kind, prompt: buildPrompt({ pet, facts, situation: situationOf({ couple, today, adventure }), kind }) };
-  }
-  return { ...base, celebrate, line, task };
-}
-
-/**
- * El celular de uno ofrece el mensaje de hoy. Si pasa las barandas, queda para los dos (gana el primero
- * que llegue); si no, cuenta como intento y la app sigue con el banco.
- */
-export async function offerLine(db, couple, me, today, { day, kind, text }, now = new Date()) {
-  if (day !== today) return { error: 'Ese mensaje ya no es de hoy.', status: 409 };
-  if (!KIND_IDS.includes(kind)) return { error: 'Tipo de mensaje inválido.', status: 400 };
-  const id = `${couple._id}:${today}`;
-  const doc = await mindLines(db).findOne({ _id: id });
-  if (doc?.text) return { accepted: false, already: true };
-  if ((doc?.attempts ?? 0) >= ATTEMPTS_PER_DAY) return { accepted: false, reason: 'attempts' };
-  const verdict = guardLine(text);
-  if (!verdict.ok) {
-    await mindLines(db).updateOne(
-      { _id: id },
-      { $inc: { attempts: 1 }, $push: { rejected: verdict.reason }, $setOnInsert: { couple: couple._id, day: today } },
-      { upsert: true },
-    );
-    return { accepted: false, reason: verdict.reason };
-  }
-  try {
-    await mindLines(db).updateOne(
-      { _id: id, text: null },
-      { $set: { couple: couple._id, day: today, kind, text: verdict.text, by: String(me._id), at: now } },
-      { upsert: true },
-    );
-  } catch (e) {
-    if (!isDuplicate(e)) throw e;
-    return { accepted: false, already: true };
-  }
-  return { accepted: true };
+  const canWrite = !line && (doc?.attempts ?? 0) < ATTEMPTS_PER_DAY && Boolean(mindConfig.writer);
+  if (canWrite) composeSoon(db, { couple, today, joinedOn, pet, adventure, now });
+  return { ...base, celebrate, line, writing: canWrite };
 }
 
 /** Enciendo o apago los mensajes personalizados (si cualquiera los apaga, los dos vuelven al banco). */
@@ -279,15 +310,26 @@ export async function seeWake(db, key, me, now = new Date()) {
   await couples(db).updateOne({ _id: key }, { $set: { [`mind.woke.${me._id}`]: now } });
 }
 
-/** Al borrar mis datos: los mensajes que redactó mi celular y lo que Minu sabía (se vuelve a armar). */
+/** Al borrar mis datos: lo que Minu sabía y los mensajes que salieron de ahí (se vuelve a armar). */
 export async function eraseMyMind(db, key, me) {
   await Promise.all([
-    mindLines(db).deleteMany({ couple: key, by: String(me._id) }),
+    mindLines(db).deleteMany({ couple: key }),
     couples(db).updateOne({ _id: key }, { $unset: { 'mind.digest': '', [`mind.woke.${me._id}`]: '' } }),
   ]);
 }
 
-/** Las 30 situaciones de ensayo con el encargo que recibiría el celular en cada una. */
+/** Ensaya una situación con el redactor configurado: el texto crudo, el veredicto y cuánto tardó. */
+export async function rehearseCase(pet, today, id) {
+  const c = rehearsal(pet, today).find((r) => r.id === id);
+  if (!c) return { error: 'Situación desconocida.', status: 404 };
+  if (!mindConfig.writer) return { raw: null, ok: false, text: null, reason: 'no_writer', ms: 0 };
+  const start = Date.now();
+  const raw = await mindConfig.writer.write(c.prompt);
+  const verdict = raw ? guardLine(raw) : { ok: false, reason: 'empty' };
+  return { raw, ok: verdict.ok, text: verdict.text ?? null, reason: verdict.reason ?? null, ms: Date.now() - start };
+}
+
+/** Las 30 situaciones de ensayo con el encargo que recibiría el redactor en cada una. */
 export function rehearsal(pet, today) {
   return REHEARSAL.map((c) => ({
     id: c.id,

@@ -8,6 +8,7 @@ import { createApp } from '../src/app.js';
 import { attachRealtime } from '../src/realtime.js';
 import { ensureIndexes } from '../src/db.js';
 import { addListening } from '../src/duo.js';
+import { mindIdle } from '../src/mind.js';
 
 const config = {
   jwtSecret: 'secreto-de-prueba',
@@ -28,6 +29,10 @@ const verifyGoogle = async (idToken) => {
 // Notificaciones falsas: se guardan para revisarlas
 const pushes = [];
 const push = { enabled: true, send: async (userId, data) => (pushes.push({ userId: String(userId), data }), 1) };
+// Redactor de mentira para la voz de Minu: responde lo que la prueba ponga en mindReplies (si no, nada)
+const mindReplies = [];
+const mindPrompts = [];
+const mindWriter = { model: 'prueba', write: async (prompt) => (mindPrompts.push(prompt), mindReplies.shift() ?? null) };
 
 before(async () => {
   mongo = await MongoMemoryServer.create();
@@ -36,13 +41,14 @@ before(async () => {
   const db = client.db('minu-test');
   await ensureIndexes(db);
   const realtime = {};
-  server = http.createServer(createApp(db, config, realtime, { verifyGoogle, push, clock: () => fakeNow ?? new Date() }));
+  server = http.createServer(createApp(db, config, realtime, { verifyGoogle, push, mindWriter, clock: () => fakeNow ?? new Date() }));
   Object.assign(realtime, attachRealtime(server, db, config, push));
   await new Promise((r) => server.listen(0, r));
   base = `http://localhost:${server.address().port}`;
 });
 
 after(async () => {
+  await mindIdle();
   await new Promise((r) => setTimeout(r, 200)); // deja terminar los avisos de desconexión
   server.closeAllConnections?.();
   await new Promise((r) => server.close(r));
@@ -515,7 +521,7 @@ test('Minu: nace cuando los dos aceptan los términos, se alimenta de dedicatori
   try {
     fakeNow = new Date('2026-11-01T15:00:00Z');
     let duo = (await api('GET', '/duo', null, a)).body;
-    assert.deepEqual(duo.minu.terms, { version: 1, mine: false, partner: false, accepted: false, update: false });
+    assert.deepEqual(duo.minu.terms, { version: 2, mine: false, partner: false, accepted: false, update: false });
     assert.equal(duo.minu.pet, null);
     // Sin aceptar, la mascota no responde
     assert.equal((await api('POST', '/duo/pet/proposals', { kind: 'name', value: 'Pelusa' }, a)).status, 403);
@@ -937,7 +943,7 @@ test('Minu: novedad (Aventura de la semana, Cumplidos a ciegas y lenguajes del a
   }
 });
 
-test('Minu: voz propia (despierta al mes, encargo del día, barandas, ajuste y ensayo)', async () => {
+test('Minu: voz propia (despierta al mes, redacta en segundo plano, barandas, ajuste y ensayo)', async () => {
   try {
     fakeNow = new Date('2027-01-31T15:00:00Z');
     const a = (await register('mind_sara')).body.token;
@@ -951,77 +957,76 @@ test('Minu: voz propia (despierta al mes, encargo del día, barandas, ajuste y e
     assert.equal(mind.awake, false);
     assert.equal(mind.wakesOn, '2027-02-28');
     assert.equal(mind.daysLeft, 28);
-    assert.equal(mind.task, null);
+    assert.equal(mind.writing, false);
     assert.equal(mind.enabled, true);
-    const offer = (token, body) => api('POST', '/duo/minu/mind/line', body, token);
-    assert.equal((await offer(a, { day: '2027-01-31', kind: 'plan', text: 'Hola' })).status, 409);
+    const mindOf = async (token) => {
+      const m = (await api('GET', '/duo', null, token)).body.minu.mind;
+      await mindIdle();
+      return m;
+    };
 
-    // Despierta: celebración, encargo con lo que sabe de ellos y sin palabras prohibidas
+    // Despierta: el primer intento no pasa las barandas, el segundo sí y queda para los dos
     fakeNow = new Date('2027-02-28T15:00:00Z');
-    mind = (await api('GET', '/duo', null, a)).body.minu.mind;
+    const text = 'Me acordé de que hoy es un buen día para bailar en la sala. ¿Se animan los dos?';
+    mindReplies.push('Como inteligencia artificial, hoy los veo muy bien a los dos.', `"${text}"`);
+    mindPrompts.length = 0;
+    mind = await mindOf(a);
     assert.equal(mind.awake, true);
     assert.equal(mind.celebrate, true);
+    assert.equal(mind.writing, true);
     assert.equal(mind.line, null);
-    assert.equal(mind.task.day, '2027-02-28');
-    assert.match(mind.task.prompt, /Eres Minu/);
-    assert.ok(mind.task.prompt.endsWith('Mensaje:'));
-
-    // Un intento que no pasa las barandas cuenta, pero no queda
-    let res = (await offer(a, { day: mind.task.day, kind: mind.task.kind, text: 'Como inteligencia artificial, hoy los veo muy bien a los dos.' })).body;
-    assert.deepEqual({ accepted: res.accepted, reason: res.reason }, { accepted: false, reason: 'banned' });
-    assert.equal(res.duo.minu.mind.line, null);
-    assert.ok(res.duo.minu.mind.task);
-    assert.equal((await offer(a, { day: '2027-02-27', kind: 'plan', text: 'x' })).status, 409);
-    assert.equal((await offer(a, { day: '2027-02-28', kind: 'nope', text: 'x' })).status, 400);
-
-    // El que pasa es de los dos y ya no hay encargo
-    const text = 'Me acordé de que hoy es un buen día para bailar en la sala. ¿Se animan los dos?';
-    res = (await offer(a, { day: '2027-02-28', kind: 'plan', text: `"${text}"` })).body;
-    assert.equal(res.accepted, true);
-    assert.deepEqual(res.duo.minu.mind.line, { day: '2027-02-28', kind: 'plan', text });
-    assert.equal(res.duo.minu.mind.task, null);
-    mind = (await api('GET', '/duo', null, b)).body.minu.mind;
-    assert.equal(mind.line.text, text);
-    res = (await offer(b, { day: '2027-02-28', kind: 'cheer', text: 'Otro mensaje bonito para los dos de hoy, con mucho cariño.' })).body;
-    assert.equal(res.accepted, false);
-    assert.equal(res.duo.minu.mind.line.text, text);
+    assert.equal(mindPrompts.length, 2);
+    assert.match(mindPrompts[0], /Eres Minu/);
+    assert.ok(mindPrompts[0].endsWith('Mensaje:'));
+    mind = await mindOf(b);
+    assert.deepEqual(mind.line, { day: '2027-02-28', kind: mind.line.kind, text });
+    assert.equal(mind.writing, false);
+    assert.equal(mindPrompts.length, 2); // no se vuelve a redactar
 
     // Celebración vista
     mind = (await api('POST', '/duo/minu/mind/woke', null, b)).body.minu.mind;
     assert.equal(mind.celebrate, false);
-    assert.equal((await api('GET', '/duo', null, a)).body.minu.mind.celebrate, true);
+    assert.equal((await mindOf(a)).celebrate, true);
 
     // Si uno apaga los mensajes personalizados, los dos vuelven al banco (sin error)
     mind = (await api('PUT', '/duo/minu/mind', { on: false }, b)).body.minu.mind;
-    assert.deepEqual({ mineOn: mind.mineOn, enabled: mind.enabled, line: mind.line, task: mind.task }, { mineOn: false, enabled: false, line: null, task: null });
-    mind = (await api('GET', '/duo', null, a)).body.minu.mind;
+    assert.deepEqual({ mineOn: mind.mineOn, enabled: mind.enabled, line: mind.line, writing: mind.writing }, { mineOn: false, enabled: false, line: null, writing: false });
+    mind = await mindOf(a);
     assert.deepEqual({ partnerOn: mind.partnerOn, enabled: mind.enabled }, { partnerOn: false, enabled: false });
-    assert.equal((await offer(a, { day: '2027-02-28', kind: 'plan', text })).status, 409);
     mind = (await api('PUT', '/duo/minu/mind', { on: true }, b)).body.minu.mind;
-    assert.equal(mind.enabled, true);
     assert.equal(mind.line.text, text);
 
-    // Máximo de intentos por día: después Minu usa su banco
+    // Si el redactor no logra nada en 3 intentos, ese día habla el banco y no se insiste
     fakeNow = new Date('2027-03-01T15:00:00Z');
-    for (let i = 0; i < 3; i++) await offer(a, { day: '2027-03-01', kind: 'cheer', text: 'Today is a good day for both of you to dance together.' });
-    mind = (await api('GET', '/duo', null, a)).body.minu.mind;
-    assert.equal(mind.task, null);
-    assert.equal(mind.line, null);
-    assert.equal((await offer(a, { day: '2027-03-01', kind: 'cheer', text })).body.reason, 'attempts');
+    mindReplies.push('Today is a good day for both of you to dance together.');
+    mindPrompts.length = 0;
+    await mindOf(a);
+    mind = await mindOf(a);
+    assert.equal(mindPrompts.length, 3);
+    assert.deepEqual({ line: mind.line, writing: mind.writing }, { line: null, writing: false });
 
-    // Ensayo: 30 situaciones y revisión sin guardar
+    // Ensayo: 30 situaciones (sin el encargo), redactar una y revisar un texto
     const cases = (await api('GET', '/duo/minu/mind/rehearsal', null, a)).body.cases;
     assert.equal(cases.length, 30);
-    assert.ok(cases.every((c) => c.prompt.includes('Encargo:')));
+    assert.equal(cases[0].prompt, undefined);
+    mindReplies.push('Hoy podrían cocinar juntos esa receta que tanto les gusta, ¿se animan?');
+    const tried = (await api('POST', `/duo/minu/mind/rehearsal/${cases[0].id}`, null, a)).body;
+    assert.equal(tried.ok, true);
+    assert.equal(typeof tried.ms, 'number');
+    assert.equal((await api('POST', '/duo/minu/mind/rehearsal/nope', null, a)).status, 404);
     const check = (await api('POST', '/duo/minu/mind/check', { text: 'Soy un asistente que los quiere mucho a los dos.' }, a)).body;
     assert.deepEqual(check, { ok: false, text: null, reason: 'banned' });
 
-    // Borrar mis datos se lleva lo que redactó mi celular
+    // Borrar mis datos se lleva lo que Minu sabía y sus mensajes
     fakeNow = new Date('2027-02-28T16:00:00Z');
     await api('DELETE', '/duo/minu/data', null, a);
     await api('POST', '/duo/terms/accept', null, a);
-    assert.equal((await api('GET', '/duo', null, b)).body.minu.mind.line, null);
+    mindReplies.length = 0;
+    mind = await mindOf(b);
+    assert.equal(mind.line, null);
   } finally {
     fakeNow = null;
+    mindReplies.length = 0;
+    await mindIdle();
   }
 });

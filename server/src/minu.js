@@ -10,7 +10,8 @@ import { eraseMyMind, mindView } from './mind.js';
  * funciones de la mascota solo funcionan cuando los dos aceptaron. Si los términos cambian, se sube
  * TERMS_VERSION y los dos vuelven a aceptar (sin perder nada).
  */
-export const TERMS_VERSION = 1;
+// v2 (2026-11): el mensaje del día se redacta con un servicio externo a partir de un resumen corto
+export const TERMS_VERSION = 2;
 
 export function termsView(couple, me, partner) {
   const accepted = (id) => (couple?.terms?.[String(id)]?.version ?? 0) >= TERMS_VERSION;
@@ -45,7 +46,7 @@ export async function acceptTerms(db, me, today, now = new Date()) {
 /**
  * Lo de Minu que va dentro de GET /duo: términos y, si los dos aceptaron, la mascota y lo del día
  * (toques, pregunta del día, frasco de gracias y buenas noticias), lo de confianza (Buzón, Tregua, Promesas),
- * la novedad (Aventura, Cumplidos) y su voz propia (mensaje del día redactado en el celular).
+ * la novedad (Aventura, Cumplidos) y su voz propia (mensaje del día redactado por el servicio configurado).
  */
 export async function minuState(db, couple, me, today, joinedOn, now = new Date()) {
   const terms = termsView(couple, me._id, me.partnerId);

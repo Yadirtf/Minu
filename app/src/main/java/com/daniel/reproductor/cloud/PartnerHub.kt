@@ -2,8 +2,6 @@ package com.daniel.reproductor.cloud
 
 import android.content.ComponentName
 import android.content.Context
-import com.daniel.reproductor.minu.MinuMinds
-import com.daniel.reproductor.minu.MinuThinker
 import androidx.core.content.ContextCompat
 import androidx.media3.common.C
 import androidx.media3.common.Player
@@ -98,10 +96,7 @@ class PartnerHub(
     val events: SharedFlow<HubEvent> = _events.asSharedFlow()
 
     private val foreground = MutableStateFlow(false)
-
-    /** La voz propia de Minu: redacta el mensaje del día dentro del celular cuando hay encargo. */
-    private val mind = MinuMinds.create()
-    private val thinker = MinuThinker(mind, scope, { task, text -> api.offerMindLine(task, text) }, { MinuMinds.unmetered(context) })
+    private var mindRetry: Job? = null
     private var socket: WebSocket? = null
     private var reconnectJob: Job? = null
     private var djJob: Job? = null
@@ -199,9 +194,13 @@ class PartnerHub(
             runCatching { PromiseReminders.sync(context, info?.minu?.trust?.promises) }
             runCatching { SurpriseReminder.sync(context, info?.minu?.novelty?.compliments?.nextOn) }
         }
-        // Minu solo puede redactar con la app abierta (AICore no deja hacerlo en segundo plano)
-        val task = info?.minu?.mind?.task
-        if (task != null && foreground.value) scope.launch { thinker.think(task)?.let(::setDuo) }
+        // Minu está escribiendo el mensaje de hoy: llega por tiempo real; si el aviso se pierde, se pide otra vez
+        if (info?.minu?.mind?.writing == true && mindRetry?.isActive != true) {
+            mindRetry = scope.launch {
+                kotlinx.coroutines.delay(MIND_RETRY_MS)
+                refreshDuo()
+            }
+        }
     }
 
     // ---------- Voz propia de Minu ----------
@@ -209,11 +208,7 @@ class PartnerHub(
     suspend fun setMindOn(on: Boolean) = setDuo(api.setMindOn(on))
     suspend fun seeMindWake() = setDuo(api.seeMindWake())
     suspend fun mindRehearsal() = api.mindRehearsal()
-    suspend fun checkMindLine(text: String) = api.checkMindLine(text)
-    suspend fun mindReadiness() = mind.readiness()
-    suspend fun prepareMind() = mind.prepare()
-    /** Para el ensayo: redacta sin guardar nada. */
-    suspend fun rehearse(prompt: String) = mind.write(prompt)
+    suspend fun rehearseMind(id: String) = api.rehearseMind(id)
 
     // ---------- Pareja ----------
 
@@ -574,6 +569,7 @@ class PartnerHub(
 
     companion object {
         private const val SAVED_EMOJI = "💚"
+        private const val MIND_RETRY_MS = 10_000L
 
         /** Lanza el error con un mensaje claro para la pantalla. */
         suspend fun <T> userAction(block: suspend () -> T): Result<T> =

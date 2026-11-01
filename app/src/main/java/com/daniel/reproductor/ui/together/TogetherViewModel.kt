@@ -319,17 +319,10 @@ class TogetherViewModel(
     fun setMindOn(on: Boolean) = action(if (on) "Mensajes personalizados encendidos" else "Listo, les hablo con mis frases de siempre") { hub.setMindOn(on) }
     fun seeMindWake() = action { hub.seeMindWake() }
 
-    /** El ensayo de las 30 situaciones: redacta dentro del celular y revisa en el servidor, sin guardar. */
+    /** El ensayo de las 30 situaciones: redacta en el servidor y muestra el veredicto, sin guardar. */
     val rehearsal = com.daniel.reproductor.ui.together.minu.RehearsalActions(
         load = { hub.mindRehearsal() },
-        readiness = { hub.mindReadiness() },
-        prepare = { hub.prepareMind() },
-        run = { case ->
-            val start = System.currentTimeMillis()
-            val raw = hub.rehearse(case.prompt)
-            val verdict = raw?.let { runCatching { hub.checkMindLine(it) }.getOrNull() }
-            com.daniel.reproductor.ui.together.minu.RehearsalResult(raw, verdict, System.currentTimeMillis() - start)
-        },
+        run = { case -> hub.rehearseMind(case.id) },
     )
 
     /** Fotos de aventuras ya bajadas, por semana (null = no hay o no se pudo). */

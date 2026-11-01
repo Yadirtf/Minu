@@ -68,7 +68,7 @@ fun MinuTermsSheet(partnerName: String, update: Boolean, onAccept: () -> Unit, o
                 "Sus dedicatorias, respuestas y recuerdos son de los dos y solo los ven ustedes dos.",
                 "Lo que se sella solo se abre cuando ambos responden.",
                 "Nadie ve su ubicación, sus horas de conexión ni si leyeron algo.",
-                "Aprendo de lo que comparten para acompañarlos mejor. Algunos de mis mensajes los redacta un asistente que funciona solo dentro de su celular: nada sale hacia servicios externos.",
+                "Aprendo de lo que comparten para acompañarlos mejor. Para escribir mi mensaje del día envío un resumen corto (nunca el Buzón ni la Tregua) a un servicio de redacción externo, que no lo guarda ni lo usa para entrenar.",
             ),
             PetSpecies.CAT, PetMood.HAPPY,
         ),

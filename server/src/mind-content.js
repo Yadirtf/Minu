@@ -1,6 +1,6 @@
 /**
  * Contenido de la "voz propia" de Minu: su personalidad, ejemplos de cómo habla, los tipos de mensaje y
- * las barandas. El texto se redacta dentro del celular de la pareja; aquí solo vive la receta, para poder
+ * las barandas. El servidor la manda al redactor configurado (mind-writer.js); vive aquí para poder
  * afinarla sin publicar otra APK. Nada de esto se muestra en la app.
  */
 
@@ -93,7 +93,7 @@ export const LINE_MAX = 240;
 export const ATTEMPTS_PER_DAY = 3;
 
 /**
- * 30 situaciones para ensayar a mano en un celular compatible (#58/#59). Cada una es un resumen de pareja
+ * 30 situaciones para ensayar a mano desde la app (#58/#59). Cada una es un resumen de pareja
  * inventado + el día; el ensayo arma el mismo encargo que en la vida real y muestra si pasó las barandas.
  */
 export const REHEARSAL = [

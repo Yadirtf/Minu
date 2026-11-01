@@ -117,6 +117,7 @@ fun MinuEntry(
                 val mind = minu.mind
                 when {
                     mind?.line != null -> MindLineCard(mind.line, onDedicate)
+                    mind?.writing == true -> MindThinkingCard(pet.name)
                     mind != null && !mind.awake && mind.wakesOn != null -> LearningRow(mind, pet.name)
                 }
                 minu.daily?.let { daily ->
