@@ -39,6 +39,10 @@ import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
+import com.daniel.reproductor.cloud.MinuPet
+import com.daniel.reproductor.cloud.PetMood
+import com.daniel.reproductor.ui.together.minu.MinuCreature
+import com.daniel.reproductor.ui.together.minu.MinuVoice
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
@@ -70,6 +74,7 @@ fun IncomingDedicationOverlay(
     onListen: () -> Unit,
     onLater: () -> Unit,
     onReact: (String) -> Unit,
+    pet: MinuPet? = null,
 ) {
     val c = MaterialTheme.colorScheme
     val style = LocalAppStyle.current
@@ -90,7 +95,13 @@ fun IncomingDedicationOverlay(
             modifier = Modifier.padding(24.dp).fillMaxWidth(),
         ) {
             Column(Modifier.padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                Text("💌", fontSize = 36.sp)
+                if (pet != null) {
+                    // Minu llega con la carta
+                    MinuCreature(pet.species, PetMood.RADIANT, pet.stage, Modifier.size(96.dp), carrying = true)
+                    Text("${pet.name}: ${MinuVoice.DELIVERY}", style = MaterialTheme.typography.labelLarge, color = c.onSurfaceVariant)
+                } else {
+                    Text("💌", fontSize = 36.sp)
+                }
                 Text(
                     "${dedication.fromName} te dedicó una canción",
                     style = MaterialTheme.typography.titleLarge, textAlign = TextAlign.Center,

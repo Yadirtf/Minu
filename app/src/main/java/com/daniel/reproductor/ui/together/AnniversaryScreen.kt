@@ -51,6 +51,9 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.withFrameMillis
 import androidx.compose.ui.Alignment
+import com.daniel.reproductor.cloud.PetMood
+import com.daniel.reproductor.ui.together.minu.MinuCompanion
+import com.daniel.reproductor.ui.together.minu.MinuVoice
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
@@ -108,6 +111,14 @@ fun AnniversaryScreen(vm: TogetherViewModel, years: Int, me: String, partnerName
                 g.openedAt == null -> WrappedGift(vm, g, me, partnerName)
                 !watched && g.story != null -> Opening(g.years, g.story, me, partnerName, onPlay = { vm.playSong(it) }) { watched = true }
                 g.story != null -> YearStories(vm, g, g.story, partnerName, duo?.letter)
+            }
+            // Minu sostiene el regalo mientras se abrazan
+            val pet = duo?.minu?.pet
+            if (pet != null && g != null && g.openedAt == null) {
+                MinuCompanion(
+                    pet, MinuVoice.ANNIVERSARY, mood = PetMood.RADIANT,
+                    modifier = Modifier.align(Alignment.TopStart).systemBarsPadding().padding(12.dp),
+                )
             }
             IconButton(onClick = onDismiss, modifier = Modifier.systemBarsPadding().align(Alignment.TopEnd)) {
                 Icon(Icons.Default.Close, "Cerrar", tint = Color.White)

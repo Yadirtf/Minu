@@ -140,6 +140,11 @@ class PartnerHub(
     suspend fun giveUpRescue() = setDuo(api.giveUpRescue())
     suspend fun markMission(month: Int, done: Boolean) = setDuo(api.markMission(month, done))
     suspend fun writeLetter(text: String) = setDuo(api.writeLetter(text))
+    suspend fun acceptMinuTerms() = setDuo(api.acceptMinuTerms())
+    suspend fun proposePet(kind: String, value: String) = setDuo(api.proposePet(kind, value))
+    suspend fun acceptPetProposal(kind: String) = setDuo(api.acceptPetProposal(kind))
+    suspend fun dropPetProposal(kind: String) = setDuo(api.dropPetProposal(kind))
+    suspend fun eraseMinuData() = setDuo(api.eraseMinuData())
 
     /** Solo lo de Dúo (racha y fecha), sin pedir de nuevo pareja y cartas. */
     fun refreshDuo() {
