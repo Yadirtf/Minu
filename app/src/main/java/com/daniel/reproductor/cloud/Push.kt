@@ -32,6 +32,7 @@ object Push {
     const val CHANNEL_DEDICATIONS = "dedicatorias"
     const val CHANNEL_TOGETHER = "juntos"
     const val EXTRA_LISTEN_INVITE = "minu.listen_invite"
+    const val EXTRA_OPEN_DUO = "minu.open_duo"
 
     fun available(context: Context): Boolean =
         BuildConfig.HAS_FIREBASE && FirebaseApp.getApps(context).isNotEmpty()
@@ -128,6 +129,22 @@ class MinuMessagingService : FirebaseMessagingService() {
             "anniversary.hug" -> notify(9, Push.CHANNEL_TOGETHER, "🎁 $from te está abrazando en el hilo", "Abre Minu y abraza tú también: su aniversario solo se abre con los dos.")
             "letter.sealed" -> notify(10, Push.CHANNEL_TOGETHER, "💌 $from selló una carta para su aniversario", "Se abrirá el día que lo abran juntos.")
             "duo.origin" -> notify(5, Push.CHANNEL_TOGETHER, "💞 $from guardó el día en que empezó todo", "Abre Dúo para ver cuánto tiempo llevan juntos.")
+            "minu.terms" -> notify(
+                11, Push.CHANNEL_TOGETHER, "🧶 $from quiere despertar a Minu",
+                "Alguien duerme en su hilo rojo. Entra a Dúo, lee cómo cuida sus datos y acepta tú también.",
+                extra = Push.EXTRA_OPEN_DUO,
+            )
+            "minu.born" -> notify(
+                11, Push.CHANNEL_TOGETHER, "🧶 ¡Minu despertó!",
+                "Ya vive en su hilo rojo. Pasa por Dúo a saludarle.",
+                extra = Push.EXTRA_OPEN_DUO,
+            )
+            "minu.proposal" -> notify(
+                12, Push.CHANNEL_TOGETHER,
+                if (data["kind"] == "species") "🧶 $from propuso otra forma para Minu" else "🧶 $from propuso un nuevo nombre para Minu",
+                "Míralo en la casita de Minu, en Dúo.",
+                extra = Push.EXTRA_OPEN_DUO,
+            )
             "listen.invite" -> notify(
                 4, Push.CHANNEL_TOGETHER, "🎧 $from quiere escuchar música contigo", "Toca para unirte.",
                 extra = Push.EXTRA_LISTEN_INVITE,
