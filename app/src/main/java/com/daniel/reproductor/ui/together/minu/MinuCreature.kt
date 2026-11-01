@@ -319,10 +319,10 @@ private fun DrawScope.drawBunny(c: Offset, head: Offset, neck: Offset, r: Float,
     // Colita de algodón
     ball(c + Offset(r * 0.78f, r * 0.55f), r * 0.2f, fur)
     rotate(pose.tilt, neck) {
-        val droop = if (mood == PetMood.MISSING || mood == PetMood.SLEEPY) 35f else 6f
+        val droop = if (mood == PetMood.MISSING || mood == PetMood.SLEEPY) 24f else 6f
         for (side in listOf(-1f, 1f)) {
             // Cada oreja se mueve con su propio retraso: la de la izquierda un poco después
-            val angle = side * (12f + droop) + pose.ear * (if (side < 0) 1f else 0.7f)
+            val angle = side * (12f + droop + pose.ear * (if (side < 0) 0.6f else 0.45f))
             rotate(angle, head + Offset(side * r * 0.3f, -r * 0.5f)) {
                 val ear = head + Offset(side * r * 0.3f, -r * 1.25f)
                 ball(ear, r * 0.24f, fur, rx = 1f, ry = 2.6f)
@@ -346,15 +346,15 @@ private fun DrawScope.drawDog(c: Offset, head: Offset, neck: Offset, r: Float, p
     }
     ball(c + Offset(0f, r * 0.25f), r * 0.85f, fur, rx = 1.05f, ry = 0.9f)
     rotate(pose.tilt, neck) {
-        ball(head, r * 0.82f, fur)
-        // Orejas caídas que rebotan
+        // Orejas caídas detrás de la cabeza: asoman a los lados y rebotan con el cuerpo
         val earColor = lerp(fur, Color.Black, 0.3f)
         for (side in listOf(-1f, 1f)) {
-            val base = if (mood == PetMood.MISSING) 5f else 20f
-            rotate(side * (base + pose.ear * 0.8f), head + Offset(side * r * 0.6f, -r * 0.5f)) {
-                ball(head + Offset(side * r * 0.75f, -r * 0.05f), r * 0.26f, earColor, rx = 1f, ry = 1.8f)
+            val base = if (mood == PetMood.MISSING) 4f else 14f
+            rotate(side * (base + pose.ear * 0.8f), head + Offset(side * r * 0.55f, -r * 0.55f)) {
+                ball(head + Offset(side * r * 0.82f, r * 0.05f), r * 0.27f, earColor, rx = 1f, ry = 1.9f)
             }
         }
+        ball(head, r * 0.82f, fur)
         // Hocico
         ball(head + Offset(0f, r * 0.32f), r * 0.32f, lerp(fur, Color.White, 0.55f), rx = 1.2f, ry = 0.85f)
         drawOval(INK, topLeft = head + Offset(-r * 0.1f, r * 0.15f), size = Size(r * 0.2f, r * 0.13f))
