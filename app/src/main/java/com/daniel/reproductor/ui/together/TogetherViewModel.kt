@@ -314,6 +314,23 @@ class TogetherViewModel(
     fun heartCompliment(id: String) = action { hub.heartCompliment(id) }
     fun answerLoveQuiz(answers: List<String>) = action { hub.answerLoveQuiz(answers) }
 
+    // ---------- Voz propia de Minu ----------
+
+    fun setMindOn(on: Boolean) = action(if (on) "Mensajes personalizados encendidos" else "Listo, les hablo con mis frases de siempre") { hub.setMindOn(on) }
+    fun seeMindWake() = action { hub.seeMindWake() }
+
+    /** El ensayo de las 30 situaciones: redacta dentro del celular y revisa en el servidor, sin guardar. */
+    val rehearsal = com.daniel.reproductor.ui.together.minu.RehearsalActions(
+        load = { hub.mindRehearsal() },
+        readiness = { hub.mindReadiness() },
+        run = { case ->
+            val start = System.currentTimeMillis()
+            val raw = hub.rehearse(case.prompt)
+            val verdict = raw?.let { runCatching { hub.checkMindLine(it) }.getOrNull() }
+            com.daniel.reproductor.ui.together.minu.RehearsalResult(raw, verdict, System.currentTimeMillis() - start)
+        },
+    )
+
     /** Fotos de aventuras ya bajadas, por semana (null = no hay o no se pudo). */
     private val _photos = MutableStateFlow<Map<String, androidx.compose.ui.graphics.ImageBitmap?>>(emptyMap())
     val photos: StateFlow<Map<String, androidx.compose.ui.graphics.ImageBitmap?>> = _photos.asStateFlow()

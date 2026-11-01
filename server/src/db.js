@@ -33,6 +33,8 @@ export const adventurePhotos = (db) => db.collection('adventure_photos');
 export const compliments = (db) => db.collection('compliments');
 /** Memoria de la pareja (capa 1): hechos tipados que cada función guarda para que Minu los recuerde. */
 export const coupleMemory = (db) => db.collection('couple_memory');
+/** El mensaje del día que redactó el celular de uno de los dos (la voz propia de Minu). */
+export const mindLines = (db) => db.collection('mind_lines');
 
 /** Llave de la pareja: los dos ids ordenados, así sobrevive si se desvinculan y vuelven. */
 export const coupleKey = (a, b) => [String(a), String(b)].sort().join('_');
@@ -58,6 +60,7 @@ export async function ensureIndexes(db) {
   await adventures(db).createIndex({ couple: 1, week: -1 });
   await compliments(db).createIndex({ couple: 1, to: 1, releaseOn: -1 });
   await compliments(db).createIndex({ couple: 1, by: 1, releaseOn: -1 });
+  await mindLines(db).createIndex({ couple: 1, day: -1 });
   await coupleMemory(db).createIndex({ couple: 1, kind: 1, day: -1 });
 }
 

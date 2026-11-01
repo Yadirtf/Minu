@@ -129,6 +129,8 @@ dependencies {
     ksp(libs.androidx.room.compiler)
 
     implementation(libs.androidx.work.runtime.ktx)
+    // La voz propia de Minu: redacta dentro del celular (Gemini Nano vía AICore). Sin Nano, usa su banco
+    implementation(libs.mlkit.genai.prompt)
     implementation(libs.okhttp)
     implementation(libs.coil.compose)
     implementation(libs.coil.network.okhttp)

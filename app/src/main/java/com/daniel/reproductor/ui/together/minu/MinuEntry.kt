@@ -55,6 +55,7 @@ fun MinuEntry(
     onOpenHouse: () -> Unit,
     onTouch: (TouchKind) -> Unit = {},
     onOpenDaily: (MinuDailySheet) -> Unit = {},
+    onDedicate: () -> Unit = {},
 ) {
     val c = MaterialTheme.colorScheme
     val shape = LocalAppStyle.current.cardShape
@@ -112,6 +113,12 @@ fun MinuEntry(
                 // Durante la Tregua Minu deja de jugar: solo respira con ustedes
                 TruceCard(pet, truce, partnerName) { onOpenDaily(MinuDailySheet.TRUCE) }
             } else {
+                // Su voz propia: el mensaje de hoy o, mientras aprende, la cuenta regresiva
+                val mind = minu.mind
+                when {
+                    mind?.line != null -> MindLineCard(mind.line, onDedicate)
+                    mind != null && !mind.awake && mind.wakesOn != null -> LearningRow(mind, pet.name)
+                }
                 minu.daily?.let { daily ->
                     MinuTouchBar(daily.touch.left, daily.touch.last, partnerName, onTouch)
                     DailyTiles(daily, partnerName, onOpenDaily)

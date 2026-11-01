@@ -133,6 +133,7 @@ data class MinuInfo(
     val daily: MinuDaily? = null,
     val trust: MinuTrust? = null,
     val novelty: MinuNovelty? = null,
+    val mind: MinuMindInfo? = null,
 )
 
 /** Los cuatro gestos del Toque de Minu. */
@@ -287,6 +288,41 @@ data class LoveState(val mine: Boolean, val partner: Boolean, val suggestion: St
 data class MinuNovelty(val adventure: Adventure, val compliments: ComplimentBox, val love: LoveState)
 
 data class LoveOption(val text: String, val lang: String)
+
+/** Los cuatro tipos de mensaje que Minu redacta con su voz propia. */
+enum class MindKind(val id: String) {
+    PLAN("plan"), QUESTION("question"), CHEER("cheer"), DEDICATION("dedication");
+    companion object { fun from(id: String?) = entries.firstOrNull { it.id == id } ?: CHEER }
+}
+
+/** El mensaje de hoy, ya revisado, igual para los dos. */
+data class MindLine(val day: String, val kind: MindKind, val text: String)
+
+/** El encargo para redactar el mensaje de hoy dentro del celular (lo arma el servidor). */
+data class MindTask(val day: String, val kind: MindKind, val prompt: String)
+
+/**
+ * La voz propia de Minu: despierta al mes de llegar a Minu ([wakesOn]); antes, [learned] de [learnTotal]
+ * días aprendidos. [enabled] cuando ninguno apagó "Mensajes personalizados de Minu".
+ */
+data class MinuMindInfo(
+    val awake: Boolean,
+    val wakesOn: String?,
+    val daysLeft: Int,
+    val learned: Int,
+    val learnTotal: Int,
+    val mineOn: Boolean,
+    val partnerOn: Boolean,
+    val enabled: Boolean,
+    val celebrate: Boolean,
+    val line: MindLine?,
+    val task: MindTask?,
+)
+
+/** Una situación del ensayo (para revisar a mano en un celular compatible). */
+data class MindRehearsalCase(val id: String, val kind: MindKind, val mood: String, val facts: List<String>, val prompt: String)
+data class MindVerdict(val ok: Boolean, val text: String?, val reason: String?)
+data class MindOffer(val accepted: Boolean, val reason: String?, val duo: DuoInfo?)
 data class LoveQuestion(val id: String, val a: LoveOption, val b: LoveOption)
 
 data class HelpLine(val name: String, val number: String, val note: String)
@@ -550,6 +586,22 @@ class CloudApi(baseClient: OkHttpClient, private val session: Session) {
         )
     }
 
+    // ---------- Voz propia de Minu ----------
+
+    /** Ofrece el mensaje de hoy que redactó este celular; el servidor lo revisa y, si pasa, es de los dos. */
+    suspend fun offerMindLine(task: MindTask, text: String): MindOffer {
+        val json = call("POST", "/duo/minu/mind/line", JSONObject().put("day", task.day).put("kind", task.kind.id).put("text", text))
+        return MindOffer(json.optBoolean("accepted"), json.optStringOrNull("reason"), json.optJSONObject("duo")?.let(::parseDuo))
+    }
+    suspend fun setMindOn(on: Boolean): DuoInfo? = parseDuo(call("PUT", "/duo/minu/mind", JSONObject().put("on", on)))
+    suspend fun seeMindWake(): DuoInfo? = parseDuo(call("POST", "/duo/minu/mind/woke", JSONObject()))
+    suspend fun mindRehearsal(): List<MindRehearsalCase> = objects(call("GET", "/duo/minu/mind/rehearsal").optJSONArray("cases")).map {
+        MindRehearsalCase(it.optString("id"), MindKind.from(it.optString("kind")), it.optString("mood"), strings(it.optJSONArray("facts")), it.optString("prompt"))
+    }
+    suspend fun checkMindLine(text: String): MindVerdict = call("POST", "/duo/minu/mind/check", JSONObject().put("text", text)).let {
+        MindVerdict(it.optBoolean("ok"), it.optStringOrNull("text"), it.optStringOrNull("reason"))
+    }
+
     // ---------- Novedad ----------
 
     suspend fun voteAdventure(planId: String): DuoInfo? = parseDuo(call("POST", "/duo/adventure/vote", JSONObject().put("planId", planId)))
@@ -736,8 +788,23 @@ class CloudApi(baseClient: OkHttpClient, private val session: Session) {
                 json.optJSONObject("daily")?.let(::parseDaily),
                 json.optJSONObject("trust")?.let(::parseTrust),
                 json.optJSONObject("novelty")?.let(::parseNovelty),
+                json.optJSONObject("mind")?.let(::parseMind),
             )
         }
+
+        fun parseMind(m: JSONObject) = MinuMindInfo(
+            awake = m.optBoolean("awake"),
+            wakesOn = m.optStringOrNull("wakesOn"),
+            daysLeft = m.optInt("daysLeft"),
+            learned = m.optInt("learned"),
+            learnTotal = m.optInt("learnTotal", 30).coerceAtLeast(1),
+            mineOn = m.optBoolean("mineOn", true),
+            partnerOn = m.optBoolean("partnerOn", true),
+            enabled = m.optBoolean("enabled", true),
+            celebrate = m.optBoolean("celebrate"),
+            line = m.optJSONObject("line")?.let { MindLine(it.optString("day"), MindKind.from(it.optString("kind")), it.optString("text")) },
+            task = m.optJSONObject("task")?.let { MindTask(it.optString("day"), MindKind.from(it.optString("kind")), it.optString("prompt")) },
+        )
 
         private fun parsePlan(p: JSONObject) = AdventurePlan(
             p.optString("id"), PlanKind.from(p.optString("kind")), p.optString("emoji"), p.optString("title"), p.optString("detail"), p.optInt("effort", 2),

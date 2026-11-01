@@ -936,3 +936,92 @@ test('Minu: novedad (Aventura de la semana, Cumplidos a ciegas y lenguajes del a
     fakeNow = null;
   }
 });
+
+test('Minu: voz propia (despierta al mes, encargo del día, barandas, ajuste y ensayo)', async () => {
+  try {
+    fakeNow = new Date('2027-01-31T15:00:00Z');
+    const a = (await register('mind_sara')).body.token;
+    const b = (await register('mind_leo')).body.token;
+    await api('POST', '/partner/request', { username: 'mind_leo' }, a);
+    await api('POST', '/partner/accept', null, b);
+    await api('POST', '/duo/terms/accept', null, a);
+    let duo = (await api('POST', '/duo/terms/accept', null, b)).body;
+    let mind = duo.minu.mind;
+    // Llegaron el 31 de enero: despierta el 28 de febrero (fin de mes)
+    assert.equal(mind.awake, false);
+    assert.equal(mind.wakesOn, '2027-02-28');
+    assert.equal(mind.daysLeft, 28);
+    assert.equal(mind.task, null);
+    assert.equal(mind.enabled, true);
+    const offer = (token, body) => api('POST', '/duo/minu/mind/line', body, token);
+    assert.equal((await offer(a, { day: '2027-01-31', kind: 'plan', text: 'Hola' })).status, 409);
+
+    // Despierta: celebración, encargo con lo que sabe de ellos y sin palabras prohibidas
+    fakeNow = new Date('2027-02-28T15:00:00Z');
+    mind = (await api('GET', '/duo', null, a)).body.minu.mind;
+    assert.equal(mind.awake, true);
+    assert.equal(mind.celebrate, true);
+    assert.equal(mind.line, null);
+    assert.equal(mind.task.day, '2027-02-28');
+    assert.match(mind.task.prompt, /Eres Minu/);
+    assert.ok(mind.task.prompt.endsWith('Mensaje:'));
+
+    // Un intento que no pasa las barandas cuenta, pero no queda
+    let res = (await offer(a, { day: mind.task.day, kind: mind.task.kind, text: 'Como inteligencia artificial, hoy los veo muy bien a los dos.' })).body;
+    assert.deepEqual({ accepted: res.accepted, reason: res.reason }, { accepted: false, reason: 'banned' });
+    assert.equal(res.duo.minu.mind.line, null);
+    assert.ok(res.duo.minu.mind.task);
+    assert.equal((await offer(a, { day: '2027-02-27', kind: 'plan', text: 'x' })).status, 409);
+    assert.equal((await offer(a, { day: '2027-02-28', kind: 'nope', text: 'x' })).status, 400);
+
+    // El que pasa es de los dos y ya no hay encargo
+    const text = 'Me acordé de que hoy es un buen día para bailar en la sala. ¿Se animan los dos?';
+    res = (await offer(a, { day: '2027-02-28', kind: 'plan', text: `"${text}"` })).body;
+    assert.equal(res.accepted, true);
+    assert.deepEqual(res.duo.minu.mind.line, { day: '2027-02-28', kind: 'plan', text });
+    assert.equal(res.duo.minu.mind.task, null);
+    mind = (await api('GET', '/duo', null, b)).body.minu.mind;
+    assert.equal(mind.line.text, text);
+    res = (await offer(b, { day: '2027-02-28', kind: 'cheer', text: 'Otro mensaje bonito para los dos de hoy, con mucho cariño.' })).body;
+    assert.equal(res.accepted, false);
+    assert.equal(res.duo.minu.mind.line.text, text);
+
+    // Celebración vista
+    mind = (await api('POST', '/duo/minu/mind/woke', null, b)).body.minu.mind;
+    assert.equal(mind.celebrate, false);
+    assert.equal((await api('GET', '/duo', null, a)).body.minu.mind.celebrate, true);
+
+    // Si uno apaga los mensajes personalizados, los dos vuelven al banco (sin error)
+    mind = (await api('PUT', '/duo/minu/mind', { on: false }, b)).body.minu.mind;
+    assert.deepEqual({ mineOn: mind.mineOn, enabled: mind.enabled, line: mind.line, task: mind.task }, { mineOn: false, enabled: false, line: null, task: null });
+    mind = (await api('GET', '/duo', null, a)).body.minu.mind;
+    assert.deepEqual({ partnerOn: mind.partnerOn, enabled: mind.enabled }, { partnerOn: false, enabled: false });
+    assert.equal((await offer(a, { day: '2027-02-28', kind: 'plan', text })).status, 409);
+    mind = (await api('PUT', '/duo/minu/mind', { on: true }, b)).body.minu.mind;
+    assert.equal(mind.enabled, true);
+    assert.equal(mind.line.text, text);
+
+    // Máximo de intentos por día: después Minu usa su banco
+    fakeNow = new Date('2027-03-01T15:00:00Z');
+    for (let i = 0; i < 3; i++) await offer(a, { day: '2027-03-01', kind: 'cheer', text: 'Today is a good day for both of you to dance together.' });
+    mind = (await api('GET', '/duo', null, a)).body.minu.mind;
+    assert.equal(mind.task, null);
+    assert.equal(mind.line, null);
+    assert.equal((await offer(a, { day: '2027-03-01', kind: 'cheer', text })).body.reason, 'attempts');
+
+    // Ensayo: 30 situaciones y revisión sin guardar
+    const cases = (await api('GET', '/duo/minu/mind/rehearsal', null, a)).body.cases;
+    assert.equal(cases.length, 30);
+    assert.ok(cases.every((c) => c.prompt.includes('Encargo:')));
+    const check = (await api('POST', '/duo/minu/mind/check', { text: 'Soy un asistente que los quiere mucho a los dos.' }, a)).body;
+    assert.deepEqual(check, { ok: false, text: null, reason: 'banned' });
+
+    // Borrar mis datos se lleva lo que redactó mi celular
+    fakeNow = new Date('2027-02-28T16:00:00Z');
+    await api('DELETE', '/duo/minu/data', null, a);
+    await api('POST', '/duo/terms/accept', null, a);
+    assert.equal((await api('GET', '/duo', null, b)).body.minu.mind.line, null);
+  } finally {
+    fakeNow = null;
+  }
+});
