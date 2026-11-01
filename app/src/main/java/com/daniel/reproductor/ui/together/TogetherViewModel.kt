@@ -1,5 +1,6 @@
 package com.daniel.reproductor.ui.together
 
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.initializer
@@ -322,7 +323,7 @@ class TogetherViewModel(
         viewModelScope.launch {
             val bytes = api.adventurePhoto(week) ?: return@launch
             val bitmap = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Default) {
-                android.graphics.BitmapFactory.decodeByteArray(bytes, 0, bytes.size)?.let { androidx.compose.ui.graphics.asImageBitmap(it) }
+                android.graphics.BitmapFactory.decodeByteArray(bytes, 0, bytes.size)?.asImageBitmap()
             }
             _photos.update { it + (week to bitmap) }
         }
