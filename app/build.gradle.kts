@@ -159,7 +159,7 @@ tasks.withType<Test>().configureEach {
     // Las capturas solo se generan cuando se piden, para que las pruebas normales sigan siendo rápidas
     val screenshots = project.hasProperty("screenshots")
     systemProperty("roborazzi.test.record", (screenshots || project.hasProperty("cloud")).toString())
-    if (!screenshots) exclude("**/StyleScreenshots*")
+    if (!screenshots) exclude("**/*Screenshots*")
     // La prueba de punta a punta necesita el servidor local (server/test/dev-server.js)
     if (!project.hasProperty("cloud")) exclude("**/CloudIntegrationTest*")
     maxHeapSize = "3g"

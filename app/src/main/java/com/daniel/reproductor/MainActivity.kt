@@ -41,6 +41,7 @@ import androidx.compose.material3.rememberDrawerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -100,6 +101,10 @@ import com.daniel.reproductor.ui.together.StreakOverlay
 import com.daniel.reproductor.ui.together.ListenBanner
 import com.daniel.reproductor.ui.together.TogetherScreen
 import com.daniel.reproductor.ui.together.TogetherViewModel
+import com.daniel.reproductor.ui.together.minu.MinuTouchArrival
+import com.daniel.reproductor.ui.together.minu.MinuTouchFlight
+import com.daniel.reproductor.ui.together.minu.MinuTouchMeet
+import com.daniel.reproductor.ui.together.minu.MinuVoice
 import androidx.compose.ui.platform.LocalContext
 import kotlinx.coroutines.launch
 import java.time.LocalDate
@@ -200,6 +205,9 @@ internal fun AppRoot(
     val pending = dedications.firstOrNull { it.incoming && it.seenAt == null }
     // Mesiversario, aniversario o días redondos: se celebra una vez al abrir la app ese día
     val duo by together.duo.collectAsStateWithLifecycle()
+    val touchFx by together.touchFx.collectAsStateWithLifecycle()
+    // Toques que dejé para "más tarde" (siguen en Dúo, pero no vuelven a saltar en pantalla)
+    val laterTouches = remember { mutableStateListOf<String>() }
     val today = remember { LocalDate.now() }
     var celebrated by remember { mutableStateOf(DuoPrefs.celebrated(app)) }
     val milestone = DuoDates.parse(duo?.origin?.startedOn)?.let { DuoDates.milestoneOn(it, today) }
@@ -243,8 +251,12 @@ internal fun AppRoot(
             when (e) {
                 is HubEvent.Message -> snackbar.showSnackbar(e.text)
                 is HubEvent.IncomingDedication -> if (e.dedication.autoplay) liveDedicationId = e.dedication.id
-                is HubEvent.LiveReaction, is HubEvent.AnniversaryChanged -> Unit
+                is HubEvent.LiveReaction, is HubEvent.AnniversaryChanged, is HubEvent.TouchArrived -> Unit
                 HubEvent.StreakSaved -> liveSaved = true
+                // Mi pareja devolvió mi toque: los dos gestos se encuentran sobre Minu
+                is HubEvent.TouchReturned -> duo?.minu?.daily?.touch?.last?.kind?.let { mine ->
+                    together.showTouchMeet(mine, e.kind, MinuVoice.touchMet(e.kind, e.fromName))
+                }
             }
         }
     }
@@ -449,6 +461,24 @@ internal fun AppRoot(
                 onReact = { emoji -> together.react(d, emoji) },
                 pet = duo?.minu?.pet,
             )
+        }
+
+        // El Toque de Minu: volar con mi gesto, recibir el de mi pareja y celebrar cuando se encuentran
+        val minuPet = duo?.minu?.pet?.takeIf { partner?.linked == true }
+        if (minuPet != null) {
+            when (val fx = touchFx) {
+                is TogetherViewModel.TouchFx.Flight -> MinuTouchFlight(minuPet, fx.kind, partnerName) { together.clearTouchFx() }
+                is TogetherViewModel.TouchFx.Meet -> MinuTouchMeet(minuPet, fx.mine, fx.theirs, fx.line) { together.clearTouchFx() }
+                null -> if (pending == null) {
+                    duo?.minu?.daily?.touch?.incoming?.firstOrNull { it.id !in laterTouches }?.let { t ->
+                        MinuTouchArrival(
+                            minuPet, t,
+                            onReply = { kind -> laterTouches += t.id; together.replyTouch(t.id, kind, t.kind) },
+                            onLater = { laterTouches += t.id },
+                        )
+                    }
+                }
+            }
         }
 
         if (resolverTest) {

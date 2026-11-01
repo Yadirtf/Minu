@@ -64,6 +64,52 @@ object MinuVoice {
         PetSpecies.DOG -> "Leal y fiestero: mueve la cola y lleva sus dedicatorias en la boca."
     }
 
+    // ---------- Conexión diaria ----------
+
+    /** Respuestas entusiastas de respaldo (el servidor puede mandar otras). */
+    val CHEERS = listOf(
+        "¡Cuéntame todo! ¿Cómo pasó?",
+        "¡Qué orgullo me das!",
+        "¡Te lo mereces muchísimo!",
+        "¿Y cómo te sentiste?",
+        "¡Esto hay que celebrarlo!",
+        "Sabía que lo ibas a lograr 💛",
+    )
+
+    /** Reacciones cortas a la respuesta de la pareja (más que un emoji). */
+    val QUESTION_REACTIONS = listOf("Cuéntame más 💬", "No lo sabía, me encantó", "Me hiciste sonreír", "Yo también 🫶")
+
+    fun levelLabel(level: String) = when (level) {
+        "deep" -> "Profunda"
+        "personal" -> "Personal"
+        else -> "Ligera"
+    }
+
+    /** Lo que dice Minu sobre la pregunta según cómo va. */
+    fun questionLine(q: com.daniel.reproductor.cloud.DailyQuestion, partnerName: String) = when {
+        q.opened && q.myReaction == null -> "¡Se abrió el sobre! Reacciona a lo que contó $partnerName."
+        q.opened -> "Me encanta lo que se cuentan. Mañana traigo otra."
+        q.mine != null -> "Guardé tu respuesta en un sobre. Se abre cuando $partnerName responda."
+        q.partnerDone -> "$partnerName ya respondió y su sobre te espera. ¿Y tú?"
+        else -> "Respondan los dos y abro el sobre. Nadie ve nada antes."
+    }
+
+    fun touchSent(kind: com.daniel.reproductor.cloud.TouchKind, partnerName: String) = "Le llevo ${kind.sentence} a $partnerName"
+    fun touchArrived(kind: com.daniel.reproductor.cloud.TouchKind, fromName: String) = "$fromName te manda ${kind.sentence}"
+    fun touchMet(kind: com.daniel.reproductor.cloud.TouchKind, fromName: String) = "¡$fromName te devolvió ${kind.sentence}!"
+    const val TOUCH_REPLY_HINT = "Devuélveselo y yo lo llevo:"
+    const val TOUCH_MEET = "¡Se encontraron! Así me encanta 💞"
+
+    fun jarLine(count: Int) = when (count) {
+        0 -> "El frasco del mes está vacío. ¿Por qué das gracias hoy?"
+        1 -> "Ya hay un papelito en el frasco."
+        in 2..9 -> "Ya hay $count papelitos en el frasco de este mes."
+        else -> "¡$count gracias este mes! El frasco casi no cierra."
+    }
+
+    const val NEWS_HINT = "Cuando a uno le pasa algo bueno, celebrarlo juntos lo hace más grande."
+    fun newsCheerHint(name: String) = "$name te contó algo bueno. Pregúntale, celebra: eso vale más que un like."
+
     // Momentos especiales (pantallas de racha, mesiversario, aniversario, dedicatorias)
     const val AT_RISK = "Yo sostengo el hilo mientras tanto. ¡Sálvenlo juntos!"
     const val BROKEN = "Aquí sigo. Lo bonito no se pierde: volvamos a tejer."

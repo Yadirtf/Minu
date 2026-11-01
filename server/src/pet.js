@@ -27,6 +27,7 @@ export const PET_SOURCES = {
   touch: { points: 5, dailyCap: 20 },
   question: { points: 10, dailyCap: 10 },
   thanks: { points: 5, dailyCap: 10 },
+  cheer: { points: 5, dailyCap: 10 }, // una buena noticia que recibió una respuesta entusiasta
   adventure: { points: 25, dailyCap: 25 },
   promise: { points: 5, dailyCap: 10 },
 };

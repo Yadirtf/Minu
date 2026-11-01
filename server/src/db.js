@@ -13,6 +13,16 @@ export const capsules = (db) => db.collection('capsules');
 export const letters = (db) => db.collection('letters');
 /** Gestos que alimentan a Minu (_id determinista = el mismo gesto cuenta una vez). */
 export const petEvents = (db) => db.collection('pet_events');
+/** Toques de Minu (abrazo, beso, pienso en ti, te extraño) y su respuesta. */
+export const touches = (db) => db.collection('touches');
+/** Pregunta del día (_id = "<pareja>:AAAA-MM-DD"): respuestas selladas hasta que responden los dos. */
+export const questions = (db) => db.collection('questions');
+/** Frasco "Gracias por..." (_id = "<pareja>:AAAA-MM-DD:<autor>"): una apreciación por persona al día. */
+export const gratitude = (db) => db.collection('gratitude');
+/** "Te cuento algo bueno": buenas noticias y la respuesta entusiasta del otro. */
+export const goodNews = (db) => db.collection('good_news');
+/** Memoria de la pareja (capa 1): hechos tipados que cada función guarda para que Minu los recuerde. */
+export const coupleMemory = (db) => db.collection('couple_memory');
 
 /** Llave de la pareja: los dos ids ordenados, así sobrevive si se desvinculan y vuelven. */
 export const coupleKey = (a, b) => [String(a), String(b)].sort().join('_');
@@ -28,6 +38,11 @@ export async function ensureIndexes(db) {
   await capsules(db).createIndex({ couple: 1, day: -1 });
   await letters(db).createIndex({ couple: 1, year: 1 });
   await petEvents(db).createIndex({ couple: 1, day: 1 });
+  await touches(db).createIndex({ couple: 1, day: -1 });
+  await questions(db).createIndex({ couple: 1, day: -1 });
+  await gratitude(db).createIndex({ couple: 1, month: 1 });
+  await goodNews(db).createIndex({ couple: 1, createdAt: -1 });
+  await coupleMemory(db).createIndex({ couple: 1, kind: 1, day: -1 });
 }
 
 export function toId(value) {

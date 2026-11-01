@@ -106,7 +106,11 @@ import com.daniel.reproductor.ui.library.rememberSaveToPlaylistState
 import com.daniel.reproductor.ui.player.PlayerState
 import com.daniel.reproductor.ui.profile.ProfileButton
 import com.daniel.reproductor.ui.theme.LocalAppStyle
+import com.daniel.reproductor.ui.together.minu.MinuDailySheet
 import com.daniel.reproductor.ui.together.minu.MinuEntry
+import com.daniel.reproductor.ui.together.minu.MinuJarSheet
+import com.daniel.reproductor.ui.together.minu.MinuNewsSheet
+import com.daniel.reproductor.ui.together.minu.MinuQuestionSheet
 import com.daniel.reproductor.ui.together.minu.MinuHouse
 import com.daniel.reproductor.ui.together.minu.MinuHouseActions
 import com.daniel.reproductor.ui.together.minu.MinuTermsSheet
@@ -141,6 +145,9 @@ fun TogetherScreen(vm: TogetherViewModel, lib: LibraryViewModel, player: PlayerS
     var showMinuTerms by rememberSaveable { mutableStateOf(false) }
     var showMinuHouse by rememberSaveable { mutableStateOf(false) }
     var minuTermsOffered by rememberSaveable { mutableStateOf(false) }
+    var dailySheet by rememberSaveable { mutableStateOf<MinuDailySheet?>(null) }
+    val minuContent by vm.minuContent.collectAsStateWithLifecycle()
+    val pastQuestions by vm.pastQuestions.collectAsStateWithLifecycle()
     val saveSheet = rememberSaveToPlaylistState()
     val save = player?.takeIf { it.hasMedia }?.let { p ->
         SaveAction(saved = p.currentVideoId in savedIds) { saveSheet.open(p.currentSong()) }
@@ -194,7 +201,18 @@ fun TogetherScreen(vm: TogetherViewModel, lib: LibraryViewModel, player: PlayerS
         }
         if (linkedPartner != null) {
             minu?.let { m ->
-                item { MinuEntry(m, linkedPartner.displayName, onOpenTerms = { showMinuTerms = true }, onOpenHouse = { showMinuHouse = true }) }
+                item {
+                    MinuEntry(
+                        m, linkedPartner.displayName,
+                        onOpenTerms = { showMinuTerms = true },
+                        onOpenHouse = { showMinuHouse = true },
+                        onTouch = { vm.sendTouch(it) },
+                        onOpenDaily = { sheet ->
+                            dailySheet = sheet
+                            vm.loadMinuContent()
+                        },
+                    )
+                }
             }
             item { OriginLine(duo, onEdit = { editingOrigin = true }) }
             duo?.anniversaries?.lastOrNull { !it.opened && !it.beforeMinu }?.let { gift ->
@@ -310,6 +328,32 @@ fun TogetherScreen(vm: TogetherViewModel, lib: LibraryViewModel, player: PlayerS
             ),
             onDismiss = { showMinuHouse = false },
         )
+    }
+
+    // Conexión diaria: Pregunta del día, frasco de gracias y buenas noticias
+    val daily = minu?.daily
+    if (pet != null && daily != null) {
+        val name = linkedPartner?.displayName.orEmpty()
+        when (dailySheet) {
+            MinuDailySheet.QUESTION -> MinuQuestionSheet(
+                pet, daily.question, name,
+                reactions = minuContent?.questionReactions?.takeIf { it.isNotEmpty() } ?: MinuVoice.QUESTION_REACTIONS,
+                past = pastQuestions,
+                onAnswer = { vm.answerQuestion(it) },
+                onReact = { vm.reactQuestion(it) },
+                onLoadPast = { vm.loadPastQuestions() },
+                onDismiss = { dailySheet = null },
+            )
+            MinuDailySheet.JAR -> MinuJarSheet(pet, daily.jar, name, onGive = { vm.giveThanks(it) }, onDismiss = { dailySheet = null })
+            MinuDailySheet.NEWS -> MinuNewsSheet(
+                pet, daily.news, name,
+                cheers = minuContent?.cheers?.takeIf { it.isNotEmpty() } ?: MinuVoice.CHEERS,
+                onShare = { vm.shareNews(it) },
+                onCheer = { id, text -> vm.cheerNews(id, text) },
+                onDismiss = { dailySheet = null },
+            )
+            null -> Unit
+        }
     }
 
     if (editingOrigin) {

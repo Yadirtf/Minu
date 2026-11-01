@@ -10,7 +10,11 @@ import com.daniel.reproductor.cloud.CloudApi
 import com.daniel.reproductor.cloud.CloudSync
 import com.daniel.reproductor.cloud.Capsule
 import com.daniel.reproductor.cloud.CapsuleAnswer
+import com.daniel.reproductor.cloud.DailyQuestion
 import com.daniel.reproductor.cloud.Dedication
+import com.daniel.reproductor.cloud.JarNote
+import com.daniel.reproductor.cloud.MinuContent
+import com.daniel.reproductor.cloud.TouchKind
 import com.daniel.reproductor.cloud.Memories
 import com.daniel.reproductor.cloud.Mixtape
 import com.daniel.reproductor.cloud.DuoInfo
@@ -24,6 +28,7 @@ import com.daniel.reproductor.cloud.SyncStatus
 import com.daniel.reproductor.data.UserFacingException
 import com.daniel.reproductor.data.db.Song
 import com.daniel.reproductor.ui.common.app
+import com.daniel.reproductor.ui.together.minu.MinuVoice
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
@@ -31,6 +36,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.receiveAsFlow
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
 /** Cuenta en la nube y todo lo de "Dúo". */
@@ -223,6 +229,50 @@ class TogetherViewModel(
     fun dropPetProposal(kind: String) = action { hub.dropPetProposal(kind) }
     fun eraseMinuData() = action("Borré lo que me contaste. Aquí estaré si vuelves 🧶") { hub.eraseMinuData() }
 
+    // ---------- Conexión diaria con Minu ----------
+
+    /** La animación del Toque que está en pantalla (Minu volando o los dos gestos encontrándose). */
+    private val _touchFx = MutableStateFlow<TouchFx?>(null)
+    val touchFx: StateFlow<TouchFx?> = _touchFx.asStateFlow()
+    fun clearTouchFx() { _touchFx.value = null }
+    fun showTouchMeet(mine: TouchKind, theirs: TouchKind, line: String) { _touchFx.value = TouchFx.Meet(mine, theirs, line) }
+
+    fun sendTouch(kind: TouchKind) {
+        _touchFx.value = TouchFx.Flight(kind)
+        action { hub.sendTouch(kind) }
+    }
+
+    /** Devolver el toque [theirs] con [kind]: los dos gestos se encuentran sobre Minu. */
+    fun replyTouch(id: String, kind: TouchKind, theirs: TouchKind) = action {
+        hub.replyTouch(id, kind)
+        _touchFx.value = TouchFx.Meet(kind, theirs, MinuVoice.TOUCH_MEET)
+    }
+    fun answerQuestion(text: String) = action { hub.answerQuestion(text) }
+    fun reactQuestion(text: String) = action { hub.reactQuestion(text) }
+    fun giveThanks(text: String) = action { hub.giveThanks(text) }
+    fun shareNews(text: String) = action { hub.shareNews(text) }
+    fun cheerNews(id: String, text: String) = action { hub.cheerNews(id, text) }
+
+    /** Las preguntas que ya abrieron, para releerlas. */
+    private val _pastQuestions = MutableStateFlow<List<DailyQuestion>?>(null)
+    val pastQuestions: StateFlow<List<DailyQuestion>?> = _pastQuestions.asStateFlow()
+    fun loadPastQuestions() = viewModelScope.launch { runCatching { _pastQuestions.value = api.openedQuestions() } }
+
+    /** Frases que el servidor puede actualizar (respuestas entusiastas…); null = usar las de MinuVoice. */
+    private val _minuContent = MutableStateFlow<MinuContent?>(null)
+    val minuContent: StateFlow<MinuContent?> = _minuContent.asStateFlow()
+    fun loadMinuContent() {
+        if (_minuContent.value != null) return
+        viewModelScope.launch { runCatching { _minuContent.value = api.minuContent() } }
+    }
+
+    /** Frascos de "Gracias por..." de meses pasados (para Recuerdos), por "AAAA-MM". */
+    private val _jars = MutableStateFlow<Map<String, List<JarNote>>>(emptyMap())
+    val jars: StateFlow<Map<String, List<JarNote>>> = _jars.asStateFlow()
+    fun loadJar(month: String) = viewModelScope.launch {
+        runCatching { api.jar(month) }.onSuccess { notes -> _jars.update { it + (month to notes) } }
+    }
+
     fun playAll(songs: List<Song>) = viewModelScope.launch { runCatching { hub.playSongs(songs) } }
     fun giveUpRescue() = action { hub.giveUpRescue() }
 
@@ -247,6 +297,11 @@ class TogetherViewModel(
     fun leaveListen() = hub.leaveListen()
     fun takeControl() = hub.takeControl()
     fun refresh() = hub.refresh()
+
+    sealed interface TouchFx {
+        data class Flight(val kind: TouchKind) : TouchFx
+        data class Meet(val mine: TouchKind, val theirs: TouchKind, val line: String) : TouchFx
+    }
 
     companion object {
         val Factory = viewModelFactory {
