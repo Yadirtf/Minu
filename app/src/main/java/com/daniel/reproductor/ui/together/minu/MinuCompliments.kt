@@ -299,7 +299,7 @@ fun MinuLoveQuizContent(pet: MinuPet, partnerName: String, quiz: List<LoveQuesti
         // Puntitos de progreso
         Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
             quiz.indices.forEach { i ->
-                Box(Modifier.size(if (i == index) 10.dp else 7.dp).background(if (i < index) THREAD_RED else MaterialTheme.colorScheme.outlineVariant, CircleShape))
+                Box(Modifier.size(if (i == index) 10.dp else 7.dp).background(if (i < index) THREAD_RED else if (i == index) THREAD_RED.copy(alpha = 0.45f) else MaterialTheme.colorScheme.outlineVariant, CircleShape))
             }
         }
         Text("Si tuvieras que elegir…", style = MaterialTheme.typography.titleMedium)

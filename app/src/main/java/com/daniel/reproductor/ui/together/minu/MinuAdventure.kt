@@ -263,22 +263,24 @@ private fun Chosen(plan: AdventurePlan, adventure: Adventure, partnerName: Strin
 /** El plan elegido como un boleto de entrada, con su borde troquelado. */
 @Composable
 private fun Ticket(plan: AdventurePlan, footer: String) {
-    Box(Modifier.fillMaxWidth().shadow(4.dp, RoundedCornerShape(18.dp)).background(PARCHMENT, RoundedCornerShape(18.dp))) {
-        Canvas(Modifier.matchParentSize()) {
-            // Muescas a los lados y línea punteada, como un boleto
-            val y = size.height * 0.68f
-            drawCircle(Color.Black.copy(alpha = 0.25f), 12f, Offset(0f, y))
-            drawCircle(Color.Black.copy(alpha = 0.25f), 12f, Offset(size.width, y))
-            drawLine(MAP_INK.copy(alpha = 0.35f), Offset(18f, y), Offset(size.width - 18f, y), strokeWidth = 2f, pathEffect = PathEffect.dashPathEffect(floatArrayOf(10f, 8f)))
-        }
-        Column(Modifier.padding(18.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+    Column(
+        Modifier.fillMaxWidth().shadow(4.dp, RoundedCornerShape(18.dp)).background(PARCHMENT, RoundedCornerShape(18.dp)),
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        Column(Modifier.padding(start = 18.dp, end = 18.dp, top = 18.dp, bottom = 6.dp), horizontalAlignment = Alignment.CenterHorizontally) {
             Text("SU AVENTURA", color = MAP_INK.copy(alpha = 0.7f), style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold)
             Text(plan.emoji, style = MaterialTheme.typography.displaySmall)
             Text(plan.title, color = MAP_INK, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center, fontFamily = FontFamily.Serif)
             Text(plan.detail, color = MAP_INK.copy(alpha = 0.8f), style = MaterialTheme.typography.bodyMedium, textAlign = TextAlign.Center)
-            Spacer(Modifier.height(22.dp))
-            Text(footer, color = MAP_INK, style = MaterialTheme.typography.labelLarge)
         }
+        // Muescas a los lados y línea punteada, como un boleto que se puede cortar
+        Canvas(Modifier.fillMaxWidth().height(24.dp)) {
+            val y = size.height / 2
+            drawCircle(Color.Black.copy(alpha = 0.25f), 12f, Offset(0f, y))
+            drawCircle(Color.Black.copy(alpha = 0.25f), 12f, Offset(size.width, y))
+            drawLine(MAP_INK.copy(alpha = 0.35f), Offset(18f, y), Offset(size.width - 18f, y), strokeWidth = 2f, pathEffect = PathEffect.dashPathEffect(floatArrayOf(10f, 8f)))
+        }
+        Text(footer, color = MAP_INK, style = MaterialTheme.typography.labelLarge, modifier = Modifier.padding(start = 18.dp, end = 18.dp, bottom = 16.dp))
     }
 }
 
