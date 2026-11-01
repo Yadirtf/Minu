@@ -118,7 +118,7 @@ class StyleScreenshots {
         var style by mutableStateOf(StyleId.NEON)
         var screen by mutableStateOf("home")
         val lib = LibraryViewModel(app.repository, app.files, app.settings, app.network)
-        val settings = SettingsViewModel(app.repository, app.settings, app.updateChecker, app.contentResolver)
+        val settings = SettingsViewModel(app.repository, app.settings, app.downloads, app.updateChecker, app.contentResolver)
 
         compose.mainClock.autoAdvance = false
         compose.setContent {

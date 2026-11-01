@@ -129,6 +129,17 @@ class MinuMessagingService : FirebaseMessagingService() {
             "anniversary.hug" -> notify(9, Push.CHANNEL_TOGETHER, "🎁 $from te está abrazando en el hilo", "Abre Minu y abraza tú también: su aniversario solo se abre con los dos.")
             "letter.sealed" -> notify(10, Push.CHANNEL_TOGETHER, "💌 $from selló una carta para su aniversario", "Se abrirá el día que lo abran juntos.")
             "duo.origin" -> notify(5, Push.CHANNEL_TOGETHER, "💞 $from guardó el día en que empezó todo", "Abre Dúo para ver cuánto tiempo llevan juntos.")
+            "minu.touch" -> touchNotification(this, data["id"].orEmpty(), TouchKind.from(data["kind"]), from)
+            "minu.touch.reply" -> {
+                val kind = TouchKind.from(data["kind"])
+                notify(14, Push.CHANNEL_TOGETHER, "${kind.emoji} $from te devolvió ${kind.sentence}", "Minu está feliz: se encontraron 💞", extra = Push.EXTRA_OPEN_DUO)
+            }
+            "minu.question" -> notify(15, Push.CHANNEL_TOGETHER, "💌 $from respondió la pregunta del día", "Su sobre está sellado. Responde tú y se abre para los dos.", extra = Push.EXTRA_OPEN_DUO)
+            "minu.question.open" -> notify(15, Push.CHANNEL_TOGETHER, "💌 Se abrió su pregunta del día", "Mira lo que respondió $from.", extra = Push.EXTRA_OPEN_DUO)
+            "minu.question.react" -> notify(15, Push.CHANNEL_TOGETHER, "💬 $from reaccionó a tu respuesta", "Míralo en la pregunta del día.", extra = Push.EXTRA_OPEN_DUO)
+            "minu.thanks" -> notify(16, Push.CHANNEL_TOGETHER, "🫙 $from echó un gracias al frasco", "Ábrelo en Dúo para leerlo.", extra = Push.EXTRA_OPEN_DUO)
+            "minu.news" -> notify(17, Push.CHANNEL_TOGETHER, "✨ $from te cuenta algo bueno", data["text"].orEmpty().ifBlank { "Entra a Dúo a celebrarlo." }, extra = Push.EXTRA_OPEN_DUO)
+            "minu.cheer" -> notify(17, Push.CHANNEL_TOGETHER, "🎉 $from celebró tu buena noticia", "Míralo en Dúo.", extra = Push.EXTRA_OPEN_DUO)
             "minu.terms" -> notify(
                 11, Push.CHANNEL_TOGETHER, "🧶 $from quiere despertar a Minu",
                 "Alguien duerme en su hilo rojo. Entra a Dúo, lee cómo cuida sus datos y acepta tú también.",
@@ -175,5 +186,86 @@ class MinuMessagingService : FirebaseMessagingService() {
 
     private companion object {
         const val CHANNEL_DEDICATION_ID = 1
+    }
+}
+
+/** Id de la notificación del toque [touchId] (para reemplazarla al devolverlo). */
+internal fun touchNotificationId(touchId: String) = 1000 + (touchId.hashCode() and 0xffff)
+
+/**
+ * "Minu te trae un abrazo de X": con tres botones para devolverlo sin abrir la app. Al tocarla, abre Dúo,
+ * donde Minu espera con los cuatro gestos.
+ */
+@SuppressLint("MissingPermission") // se revisa abajo
+internal fun touchNotification(context: Context, touchId: String, kind: TouchKind, from: String) {
+    val allowed = Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU ||
+        ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED
+    if (!allowed || touchId.isBlank()) return
+    val id = touchNotificationId(touchId)
+    val open = PendingIntent.getActivity(
+        context, id,
+        Intent(context, MainActivity::class.java)
+            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+            .putExtra(Push.EXTRA_OPEN_DUO, true),
+        PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
+    )
+    val builder = NotificationCompat.Builder(context, Push.CHANNEL_TOGETHER)
+        .setSmallIcon(R.drawable.ic_notification)
+        .setContentTitle("${kind.emoji} $from te manda ${kind.sentence}")
+        .setContentText("Minu lo trajo volando. Devuélveselo:")
+        .setPriority(NotificationCompat.PRIORITY_HIGH)
+        .setAutoCancel(true)
+        .setContentIntent(open)
+    // Tres gestos para devolver (Android muestra hasta tres botones); el mismo que llegó va primero
+    val replies = (listOf(kind) + TouchKind.entries.filter { it != kind }).take(3)
+    replies.forEachIndexed { i, reply ->
+        val intent = Intent(context, TouchReplyReceiver::class.java)
+            .putExtra(TouchReplyReceiver.EXTRA_ID, touchId)
+            .putExtra(TouchReplyReceiver.EXTRA_KIND, reply.id)
+            .putExtra(TouchReplyReceiver.EXTRA_FROM, from)
+        val pending = PendingIntent.getBroadcast(context, id * 4 + i, intent, PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
+        builder.addAction(0, "${reply.emoji} ${reply.label}", pending)
+    }
+    NotificationManagerCompat.from(context).notify(id, builder.build())
+}
+
+/** Devuelve un toque desde el botón de la notificación y la cambia por "Minu se lo llevó". */
+class TouchReplyReceiver : android.content.BroadcastReceiver() {
+    @SuppressLint("MissingPermission") // se revisa antes de avisar
+    override fun onReceive(context: Context, intent: Intent) {
+        val app = context.applicationContext as ReproductorApp
+        val id = intent.getStringExtra(EXTRA_ID) ?: return
+        val kind = TouchKind.from(intent.getStringExtra(EXTRA_KIND))
+        val from = intent.getStringExtra(EXTRA_FROM).orEmpty()
+        val done = goAsync()
+        app.appScope.launch {
+            val ok = runCatching { app.partnerHub.replyTouch(id, kind) }.isSuccess
+            runCatching {
+                val manager = NotificationManagerCompat.from(context)
+                manager.cancel(touchNotificationId(id))
+                if (ok) {
+                    val allowed = Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU ||
+                        ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED
+                    if (allowed) {
+                        manager.notify(
+                            touchNotificationId(id),
+                            NotificationCompat.Builder(context, Push.CHANNEL_TOGETHER)
+                                .setSmallIcon(R.drawable.ic_notification)
+                                .setContentTitle("${kind.emoji} Minu le lleva ${kind.sentence} a $from")
+                                .setTimeoutAfter(4_000)
+                                .setAutoCancel(true)
+                                .build(),
+                        )
+                    }
+                }
+            }
+            done.finish()
+        }
+    }
+
+    companion object {
+        const val EXTRA_ID = "touch_id"
+        const val EXTRA_KIND = "touch_kind"
+        const val EXTRA_FROM = "touch_from"
     }
 }

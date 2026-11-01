@@ -89,7 +89,7 @@ fun MinuHouse(pet: MinuPet, partnerName: String, actions: MinuHouseActions, onDi
                     .padding(vertical = 20.dp, horizontal = 16.dp),
                 horizontalAlignment = Alignment.CenterHorizontally,
             ) {
-                MinuCreature(pet.species, pet.mood, pet.stage, Modifier.size(150.dp))
+                MinuCreature(pet.species, pet.mood, pet.stage, Modifier.size(150.dp), interactive = true)
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(pet.name, style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
                     Icon(
@@ -149,7 +149,7 @@ fun MinuHouse(pet: MinuPet, partnerName: String, actions: MinuHouseActions, onDi
             // Lo que viene
             Text("Muy pronto en mi casita", style = MaterialTheme.typography.titleMedium)
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                listOf("💬\nPregunta\ndel día", "💌\nBuzón", "🗺️\nAventura", "🕊️\nTregua").forEach { label ->
+                listOf("💌\nBuzón", "🗺️\nAventura", "🤞\nPromesas", "🕊️\nTregua").forEach { label ->
                     Surface(color = c.surfaceContainerHigh, shape = RoundedCornerShape(16.dp), modifier = Modifier.weight(1f)) {
                         Text(
                             label, textAlign = TextAlign.Center, style = MaterialTheme.typography.labelMedium,
@@ -175,8 +175,8 @@ fun MinuHouse(pet: MinuPet, partnerName: String, actions: MinuHouseActions, onDi
             title = { Text("¿Borrar lo que le contaste?") },
             text = {
                 Text(
-                    "${pet.name} olvidará lo que aportaste y se pausará hasta que vuelvas a aceptar sus términos. " +
-                        "Su nombre y su forma son de los dos, así que se quedan.",
+                    "${pet.name} olvidará lo que aportaste (tus toques, respuestas, gracias y buenas noticias) y se pausará " +
+                        "hasta que vuelvas a aceptar sus términos. Su nombre y su forma son de los dos, así que se quedan.",
                 )
             },
             confirmButton = { TextButton(onClick = { confirmErase = false; actions.erase(); onDismiss() }) { Text("Borrar") } },

@@ -53,6 +53,10 @@ sealed interface HubEvent {
     data object StreakSaved : HubEvent
     /** Algo cambió en el aniversario [years]: el otro está abrazando, lo abrieron o votó. */
     data class AnniversaryChanged(val years: Int) : HubEvent
+    /** Minu trae un toque de la pareja (abrazo, beso…) en vivo. */
+    data class TouchArrived(val id: String, val kind: TouchKind, val fromName: String) : HubEvent
+    /** La pareja devolvió mi toque: Minu celebra a los dos. */
+    data class TouchReturned(val kind: TouchKind, val fromName: String) : HubEvent
 }
 
 /**
@@ -145,6 +149,13 @@ class PartnerHub(
     suspend fun acceptPetProposal(kind: String) = setDuo(api.acceptPetProposal(kind))
     suspend fun dropPetProposal(kind: String) = setDuo(api.dropPetProposal(kind))
     suspend fun eraseMinuData() = setDuo(api.eraseMinuData())
+    suspend fun sendTouch(kind: TouchKind) = setDuo(api.sendTouch(kind))
+    suspend fun replyTouch(id: String, kind: TouchKind) = setDuo(api.replyTouch(id, kind))
+    suspend fun answerQuestion(text: String) = setDuo(api.answerQuestion(text))
+    suspend fun reactQuestion(text: String) = setDuo(api.reactQuestion(text))
+    suspend fun giveThanks(text: String) = setDuo(api.giveThanks(text))
+    suspend fun shareNews(text: String) = setDuo(api.shareNews(text))
+    suspend fun cheerNews(id: String, text: String) = setDuo(api.cheerNews(id, text))
 
     /** Solo lo de Dúo (racha y fecha), sin pedir de nuevo pareja y cartas. */
     fun refreshDuo() {
@@ -325,6 +336,14 @@ class PartnerHub(
             "pong" -> latencyMs = ((System.currentTimeMillis() - msg.optLong("t")) / 2).coerceIn(0, 2_000)
             "hello", "partner.update" -> refresh()
             "duo.update" -> refreshDuo()
+            "minu.touch" -> {
+                refreshDuo()
+                _events.tryEmit(HubEvent.TouchArrived(msg.optString("id"), TouchKind.from(msg.optString("kind")), msg.optString("fromName")))
+            }
+            "minu.touch.reply" -> {
+                refreshDuo()
+                _events.tryEmit(HubEvent.TouchReturned(TouchKind.from(msg.optString("kind")), msg.optString("fromName")))
+            }
             "anniversary.hug", "anniversary.opened", "anniversary.vote" -> {
                 if (msg.optString("type") == "anniversary.opened") refreshDuo()
                 _events.tryEmit(HubEvent.AnniversaryChanged(msg.optInt("years")))

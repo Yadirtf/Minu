@@ -44,6 +44,11 @@
             </intent-filter>
         </service>
 
+        <!-- Devolver un toque de Minu desde la notificación, sin abrir la app -->
+        <receiver
+            android:name=".cloud.TouchReplyReceiver"
+            android:exported="false" />
+
         <!-- Recibe links desde "Compartir" de YouTube -->
         <activity
             android:name=".ui.share.ShareActivity"
