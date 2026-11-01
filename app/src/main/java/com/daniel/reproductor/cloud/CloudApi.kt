@@ -127,7 +127,7 @@ data class MinuPet(
     val speciesProposal: PetProposal?,
 )
 
-data class MinuInfo(val terms: MinuTerms, val pet: MinuPet?, val daily: MinuDaily? = null)
+data class MinuInfo(val terms: MinuTerms, val pet: MinuPet?, val daily: MinuDaily? = null, val trust: MinuTrust? = null)
 
 /** Los cuatro gestos del Toque de Minu. */
 enum class TouchKind(val id: String, val emoji: String, val label: String, val sentence: String) {
@@ -174,8 +174,76 @@ data class GoodNews(val id: String, val text: String, val byMe: Boolean, val byN
 /** Lo del día con Minu (solo cuando ya nació). */
 data class MinuDaily(val touch: TouchState, val question: DailyQuestion, val jar: GratitudeJar, val news: List<GoodNews>)
 
+/**
+ * Una carta del Buzón de lo no dicho que me llegó. Mientras está [sealed] solo se sabe de quién es; al
+ * abrirla llegan las tres partes. [thanked] cuando ya dije "Gracias por contármelo".
+ */
+data class UnsaidLetter(
+    val id: String,
+    val fromName: String,
+    val at: Long,
+    val sealed: Boolean,
+    val feel: String?,
+    val whenText: String?,
+    val need: String?,
+    val thanked: Boolean,
+    val reply: String?,
+)
+
+/** Una carta que escribí. Sin "visto": solo sé si eligieron agradecerla, y su respuesta. */
+data class SentUnsaid(val id: String, val at: Long, val feel: String, val whenText: String, val need: String, val thanked: Boolean, val reply: String?)
+
+data class UnsaidBox(val incoming: List<UnsaidLetter>, val sent: List<SentUnsaid>) {
+    val sealed get() = incoming.filter { it.sealed }
+}
+
+/** Fases de la Tregua: calma (20 minutos), reparación (cada uno elige una frase) y reencuentro. */
+enum class TrucePhase { CALM, REPAIR, TOGETHER;
+    companion object { fun from(id: String?) = when (id) { "repair" -> REPAIR; "together" -> TOGETHER; else -> CALM } }
+}
+
+data class Truce(
+    val mine: Boolean,
+    val byName: String,
+    val startedAt: Long,
+    val endsAt: Long,
+    val phase: TrucePhase,
+    val canExtend: Boolean,
+    val myRepair: String?,
+    val partnerRepair: String?,
+)
+
+data class MinuPromise(
+    val id: String,
+    val text: String,
+    val mine: Boolean,
+    val byName: String,
+    val dueAt: Long,
+    val kept: Boolean,
+    val confirmed: Boolean,
+)
+
+/** [kept] = promesas cumplidas y agradecidas de los dos (nunca por persona). */
+data class PromiseBoard(val kept: Int, val items: List<MinuPromise>)
+
+/** Confianza y reparación: Buzón, Tregua (null si no hay) y Promesas pequeñas. */
+data class MinuTrust(val unsaid: UnsaidBox, val truce: Truce?, val promises: PromiseBoard)
+
+data class HelpLine(val name: String, val number: String, val note: String)
+data class HelpLines(val country: String, val lines: List<HelpLine>, val elsewhere: String)
+
+/** Resultado de revisar un texto antes de enviarlo: [help] solo si sonó a peligro. */
+data class CareCheck(val risk: Boolean, val help: HelpLines?)
+
 /** Frases que el servidor puede actualizar sin otra APK (respaldo sin conexión en MinuVoice). */
-data class MinuContent(val cheers: List<String>, val questionReactions: List<String>)
+data class MinuContent(
+    val cheers: List<String>,
+    val questionReactions: List<String>,
+    val repairs: List<String> = emptyList(),
+    val feelStarters: List<String> = emptyList(),
+    val needStarters: List<String> = emptyList(),
+    val help: HelpLines? = null,
+)
 
 data class DuoInfo(
     val origin: DuoOrigin?,
@@ -406,8 +474,39 @@ class CloudApi(baseClient: OkHttpClient, private val session: Session) {
         parseDuo(call("POST", "/duo/news/$id/cheer", JSONObject().put("text", text)))
     suspend fun minuContent(): MinuContent {
         val json = call("GET", "/minu/content")
-        return MinuContent(strings(json.optJSONArray("cheers")), strings(json.optJSONArray("questionReactions")))
+        val starters = json.optJSONObject("unsaidStarters")
+        return MinuContent(
+            cheers = strings(json.optJSONArray("cheers")),
+            questionReactions = strings(json.optJSONArray("questionReactions")),
+            repairs = strings(json.optJSONArray("repairs")),
+            feelStarters = strings(starters?.optJSONArray("feel")),
+            needStarters = strings(starters?.optJSONArray("need")),
+            help = json.optJSONObject("help")?.let(::parseHelp),
+        )
     }
+
+    // ---------- Confianza y reparación ----------
+
+    /** ¿Suena a peligro? No guarda nada: solo responde a quien escribe. */
+    suspend fun careCheck(vararg texts: String): CareCheck {
+        val json = call("POST", "/minu/care", JSONObject().put("texts", JSONArray(texts.toList())))
+        return CareCheck(json.optBoolean("risk"), json.optJSONObject("help")?.let(::parseHelp))
+    }
+    suspend fun sendUnsaid(feel: String, whenText: String, need: String): DuoInfo? =
+        parseDuo(call("POST", "/duo/unsaid", JSONObject().put("feel", feel).put("when", whenText).put("need", need)))
+    suspend fun openUnsaid(id: String): DuoInfo? = parseDuo(call("POST", "/duo/unsaid/$id/open", JSONObject()))
+    suspend fun thankUnsaid(id: String): DuoInfo? = parseDuo(call("POST", "/duo/unsaid/$id/thanks", JSONObject()))
+    suspend fun replyUnsaid(id: String, text: String): DuoInfo? =
+        parseDuo(call("POST", "/duo/unsaid/$id/reply", JSONObject().put("text", text)))
+    suspend fun startTruce(): DuoInfo? = parseDuo(call("POST", "/duo/truce", JSONObject()))
+    suspend fun extendTruce(): DuoInfo? = parseDuo(call("POST", "/duo/truce/extend", JSONObject()))
+    suspend fun readyTruce(): DuoInfo? = parseDuo(call("POST", "/duo/truce/ready", JSONObject()))
+    suspend fun repairTruce(text: String): DuoInfo? = parseDuo(call("POST", "/duo/truce/repair", JSONObject().put("text", text)))
+    suspend fun makePromise(text: String, dueAt: Long): DuoInfo? =
+        parseDuo(call("POST", "/duo/promises", JSONObject().put("text", text).put("dueAt", dueAt)))
+    suspend fun keepPromise(id: String): DuoInfo? = parseDuo(call("POST", "/duo/promises/$id/kept", JSONObject()))
+    suspend fun confirmPromise(id: String): DuoInfo? = parseDuo(call("POST", "/duo/promises/$id/confirm", JSONObject()))
+    suspend fun dropPromise(id: String): DuoInfo? = parseDuo(call("DELETE", "/duo/promises/$id"))
 
     private suspend fun call(method: String, path: String, body: JSONObject? = null, auth: Boolean = true): JSONObject =
         withContext(Dispatchers.IO) {
@@ -520,8 +619,51 @@ class CloudApi(baseClient: OkHttpClient, private val session: Session) {
                     speciesProposal = proposal("species"),
                 )
             }
-            return MinuInfo(terms, pet, json.optJSONObject("daily")?.let(::parseDaily))
+            return MinuInfo(terms, pet, json.optJSONObject("daily")?.let(::parseDaily), json.optJSONObject("trust")?.let(::parseTrust))
         }
+
+        fun parseTrust(t: JSONObject): MinuTrust {
+            val u = t.optJSONObject("unsaid") ?: JSONObject()
+            val box = UnsaidBox(
+                incoming = objects(u.optJSONArray("incoming")).map {
+                    UnsaidLetter(
+                        it.optString("id"), it.optString("fromName"), it.optLong("at"), it.optBoolean("sealed"),
+                        it.optStringOrNull("feel"), it.optStringOrNull("when"), it.optStringOrNull("need"),
+                        it.optBoolean("thanked"), it.optStringOrNull("reply"),
+                    )
+                },
+                sent = objects(u.optJSONArray("sent")).map {
+                    SentUnsaid(
+                        it.optString("id"), it.optLong("at"), it.optString("feel"), it.optString("when"), it.optString("need"),
+                        it.optBoolean("thanked"), it.optStringOrNull("reply"),
+                    )
+                },
+            )
+            val truce = t.optJSONObject("truce")?.let {
+                Truce(
+                    it.optBoolean("mine"), it.optString("byName"), it.optLong("startedAt"), it.optLong("endsAt"),
+                    TrucePhase.from(it.optString("phase")), it.optBoolean("canExtend"),
+                    it.optStringOrNull("myRepair"), it.optStringOrNull("partnerRepair"),
+                )
+            }
+            val p = t.optJSONObject("promises") ?: JSONObject()
+            val promises = PromiseBoard(
+                p.optInt("kept"),
+                objects(p.optJSONArray("items")).map {
+                    MinuPromise(
+                        it.optString("id"), it.optString("text"), it.optBoolean("mine"), it.optString("byName"),
+                        it.optLong("dueAt"), it.optBoolean("kept"), it.optBoolean("confirmed"),
+                    )
+                },
+            )
+            return MinuTrust(box, truce, promises)
+        }
+
+        fun parseHelp(h: JSONObject) = HelpLines(
+            h.optString("country"),
+            objects(h.optJSONArray("lines")).map { HelpLine(it.optString("name"), it.optString("number"), it.optString("note")) },
+            h.optString("elsewhere"),
+        )
 
         fun parseDaily(d: JSONObject): MinuDaily {
             val t = d.optJSONObject("touch") ?: JSONObject()

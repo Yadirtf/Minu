@@ -12,6 +12,7 @@ import com.daniel.reproductor.cloud.Capsule
 import com.daniel.reproductor.cloud.CapsuleAnswer
 import com.daniel.reproductor.cloud.DailyQuestion
 import com.daniel.reproductor.cloud.Dedication
+import com.daniel.reproductor.cloud.HelpLines
 import com.daniel.reproductor.cloud.JarNote
 import com.daniel.reproductor.cloud.MinuContent
 import com.daniel.reproductor.cloud.TouchKind
@@ -252,6 +253,50 @@ class TogetherViewModel(
     fun giveThanks(text: String) = action { hub.giveThanks(text) }
     fun shareNews(text: String) = action { hub.shareNews(text) }
     fun cheerNews(id: String, text: String) = action { hub.cheerNews(id, text) }
+
+    // ---------- Confianza y reparación ----------
+
+    /**
+     * Cuidado en pantalla: líneas de ayuda y, si venía de un envío, ese envío pendiente (nunca se bloquea:
+     * la persona decide si lo manda). Nada de esto se guarda ni se le cuenta a la pareja.
+     */
+    data class CareRequest(val help: HelpLines, val proceed: (() -> Unit)?)
+    private val _care = MutableStateFlow<CareRequest?>(null)
+    val care: StateFlow<CareRequest?> = _care.asStateFlow()
+    private fun helpLines() = _minuContent.value?.help ?: MinuVoice.HELP
+    fun showHelp() { _care.value = CareRequest(helpLines(), null) }
+    fun dismissCare() { _care.value = null }
+    fun proceedCare() {
+        val proceed = _care.value?.proceed
+        _care.value = null
+        proceed?.invoke()
+    }
+
+    /** Revisa con calma lo que se va a enviar; si suena a peligro, primero muestra ayuda. */
+    private fun withCare(vararg texts: String, send: () -> Unit) {
+        viewModelScope.launch {
+            val check = runCatching { api.careCheck(*texts) }.getOrNull()
+            if (check?.risk == true) _care.value = CareRequest(check.help ?: helpLines(), send) else send()
+        }
+    }
+
+    fun sendUnsaid(feel: String, whenText: String, need: String, onSent: () -> Unit) = withCare(feel, whenText, need) {
+        action { hub.sendUnsaid(feel, whenText, need); onSent() }
+    }
+    fun openUnsaid(id: String) = action { hub.openUnsaid(id) }
+    fun thankUnsaid(id: String) = action { hub.thankUnsaid(id) }
+    fun replyUnsaid(id: String, text: String) = withCare(text) { action { hub.replyUnsaid(id, text) } }
+    fun startTruce() = action { hub.startTruce() }
+    fun extendTruce() = action { hub.extendTruce() }
+    fun readyTruce() = action { hub.readyTruce() }
+    fun repairTruce(text: String) = withCare(text) { action { hub.repairTruce(text) } }
+    fun makePromise(text: String, dueAt: Long, onMade: () -> Unit) = action("Te la recordaré un ratito antes 🤞") {
+        hub.makePromise(text, dueAt)
+        onMade()
+    }
+    fun keepPromise(id: String) = action { hub.keepPromise(id) }
+    fun confirmPromise(id: String) = action { hub.confirmPromise(id) }
+    fun dropPromise(id: String) = action { hub.dropPromise(id) }
 
     /** Las preguntas que ya abrieron, para releerlas. */
     private val _pastQuestions = MutableStateFlow<List<DailyQuestion>?>(null)

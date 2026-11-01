@@ -21,6 +21,10 @@ export const questions = (db) => db.collection('questions');
 export const gratitude = (db) => db.collection('gratitude');
 /** "Te cuento algo bueno": buenas noticias y la respuesta entusiasta del otro. */
 export const goodNews = (db) => db.collection('good_news');
+/** Buzón de lo no dicho: cartas guiadas, selladas hasta que quien las recibe elige abrirlas. Viven 30 días. */
+export const unsaid = (db) => db.collection('unsaid');
+/** Promesas pequeñas: las no cumplidas se borran solas 48 h después de su hora. */
+export const promises = (db) => db.collection('promises');
 /** Memoria de la pareja (capa 1): hechos tipados que cada función guarda para que Minu los recuerde. */
 export const coupleMemory = (db) => db.collection('couple_memory');
 
@@ -42,6 +46,9 @@ export async function ensureIndexes(db) {
   await questions(db).createIndex({ couple: 1, day: -1 });
   await gratitude(db).createIndex({ couple: 1, month: 1 });
   await goodNews(db).createIndex({ couple: 1, createdAt: -1 });
+  await unsaid(db).createIndex({ couple: 1, to: 1, createdAt: -1 });
+  await unsaid(db).createIndex({ couple: 1, from: 1, createdAt: -1 });
+  await promises(db).createIndex({ couple: 1, dueAt: 1 });
   await coupleMemory(db).createIndex({ couple: 1, kind: 1, day: -1 });
 }
 

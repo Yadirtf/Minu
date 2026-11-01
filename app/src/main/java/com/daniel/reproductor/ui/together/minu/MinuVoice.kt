@@ -118,4 +118,50 @@ object MinuVoice {
     const val ANNIVERSARY = "Les guardé sus cartas todo el año."
     const val DELIVERY = "¡Te traje esto!"
     const val FAREWELL = "Gracias por dejarme acompañarlos. Sus recuerdos se quedan con cada uno."
+
+    // ---------- Confianza y reparación ----------
+
+    /** Respaldo sin conexión de las líneas de ayuda (el servidor manda las vigentes). */
+    val HELP = com.daniel.reproductor.cloud.HelpLines(
+        country = "Colombia",
+        lines = listOf(
+            com.daniel.reproductor.cloud.HelpLine("Emergencias", "123", "Si estás en peligro ahora mismo."),
+            com.daniel.reproductor.cloud.HelpLine("Línea 155", "155", "Orientación a mujeres víctimas de violencia. Gratis, 24 horas."),
+            com.daniel.reproductor.cloud.HelpLine("Línea 192, opción 4", "192", "Apoyo en salud mental del Ministerio de Salud."),
+            com.daniel.reproductor.cloud.HelpLine("Línea 106", "106", "Te escuchan si estás pasando un momento difícil (Bogotá)."),
+        ),
+        elsewhere = "Si estás en otro país, llama al número de emergencias local.",
+    )
+    const val CARE_TITLE = "Antes de seguir, quiero cuidarte"
+    const val CARE_BODY = "Algo de lo que escribiste suena a que podrías estar pasando por algo difícil o peligroso. " +
+        "No tienes que vivirlo solo: hay personas preparadas para escucharte, gratis y en reserva."
+    const val CARE_PRIVATE = "Esto no se guarda y nadie más lo ve."
+
+    val REPAIRS = listOf(
+        "Tienes razón en una parte", "Empecemos de nuevo", "Te quiero aunque estemos molestos", "Perdón por cómo lo dije",
+        "Lo que sientes me importa", "Somos un equipo", "¿Me das un abrazo?", "Quiero entenderte mejor",
+    )
+    val FEEL_STARTERS = listOf("triste", "sola / solo", "preocupado/a", "poco escuchado/a", "cansado/a", "inseguro/a")
+    val NEED_STARTERS = listOf("que me abraces", "que hablemos con calma", "que me avises", "un rato para los dos", "que me escuches sin resolver")
+
+    const val UNSAID_HINT = "Lo difícil también se puede decir con cariño. Yo lo llevo con cuidado y sin prisa."
+    fun unsaidArrived(name: String) = "Traje algo importante de $name. Ábrelo cuando tengas un momento tranquilo."
+    const val UNSAID_OPENED = "Gracias por leerlo con calma. Antes de responder, cuéntale que lo recibiste."
+    fun unsaidThanked(name: String) = "$name agradeció que se lo contaras 💛"
+    const val UNSAID_ON_WAY = "Lo llevé con cuidado"
+
+    const val TRUCE_INVITE = "Cuando una conversación se calienta, el cuerpo necesita unos 20 minutos para calmarse. " +
+        "Le aviso con cariño y no le cuento nada de lo que pasó."
+    fun truceCalm(t: com.daniel.reproductor.cloud.Truce) =
+        if (t.mine) "Respira conmigo. No hace falta resolver nada ahora." else "${t.byName} pidió una pausa. Yo cuido este silencio; respira conmigo."
+    const val TRUCE_REPAIR = "¿Listos para reencontrarse? Elige una frase y yo se la llevo."
+    fun truceWaiting(name: String) = "Le llevé tu frase. Cuando $name esté listo, elegirá la suya."
+    const val TRUCE_TOGETHER = "Se reencontraron. Esto también es amor 💞"
+
+    const val PROMISE_HINT = "La confianza se teje con cosas pequeñas cumplidas. Te lo recuerdo un ratito antes, solo a ti."
+    fun promisesKept(count: Int) = when (count) {
+        0 -> "Cada promesa cumplida es un nudito más en su hilo."
+        1 -> "Ya tienen un nudito en su hilo: una promesa cumplida."
+        else -> "$count promesas cumplidas, $count nuditos en su hilo."
+    }
 }

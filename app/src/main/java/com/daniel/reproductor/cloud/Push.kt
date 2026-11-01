@@ -140,6 +140,18 @@ class MinuMessagingService : FirebaseMessagingService() {
             "minu.thanks" -> notify(16, Push.CHANNEL_TOGETHER, "🫙 $from echó un gracias al frasco", "Ábrelo en Dúo para leerlo.", extra = Push.EXTRA_OPEN_DUO)
             "minu.news" -> notify(17, Push.CHANNEL_TOGETHER, "✨ $from te cuenta algo bueno", data["text"].orEmpty().ifBlank { "Entra a Dúo a celebrarlo." }, extra = Push.EXTRA_OPEN_DUO)
             "minu.cheer" -> notify(17, Push.CHANNEL_TOGETHER, "🎉 $from celebró tu buena noticia", "Míralo en Dúo.", extra = Push.EXTRA_OPEN_DUO)
+            // Confianza y reparación: nunca con el contenido del Buzón, y sin tono de culpa
+            "minu.unsaid" -> notify(18, Push.CHANNEL_TOGETHER, "📮 Minu trae algo importante de $from", "Ábrelo cuando tengas un momento tranquilo.", extra = Push.EXTRA_OPEN_DUO)
+            "minu.unsaid.thanks" -> notify(18, Push.CHANNEL_TOGETHER, "💛 $from agradeció lo que le contaste", "Gracias por animarte a decirlo.", extra = Push.EXTRA_OPEN_DUO)
+            "minu.unsaid.reply" -> notify(18, Push.CHANNEL_TOGETHER, "📮 $from te respondió", "Su respuesta está en el Buzón.", extra = Push.EXTRA_OPEN_DUO)
+            "minu.truce" -> notify(19, Push.CHANNEL_TOGETHER, "🕊️ $from necesita una pausa", "Minu cuida 20 minutos de calma. Después se reencuentran.", extra = Push.EXTRA_OPEN_DUO)
+            "minu.truce.extend" -> notify(19, Push.CHANNEL_TOGETHER, "🕊️ $from necesita un poco más de calma", "Minu sigue cuidando el silencio.", extra = Push.EXTRA_OPEN_DUO)
+            "minu.truce.ready" -> notify(19, Push.CHANNEL_TOGETHER, "🕊️ $from está listo para reencontrarse", "Cuando tú también lo estés, elige una frase.", extra = Push.EXTRA_OPEN_DUO)
+            "minu.truce.repair" -> notify(19, Push.CHANNEL_TOGETHER, "🕊️ $from: “${data["text"].orEmpty()}”", "Cuando estés listo, elige tu frase.", extra = Push.EXTRA_OPEN_DUO)
+            "minu.truce.together" -> notify(19, Push.CHANNEL_TOGETHER, "💞 $from: “${data["text"].orEmpty()}”", "Se reencontraron. Minu está feliz.", extra = Push.EXTRA_OPEN_DUO)
+            "minu.promise" -> notify(20, Push.CHANNEL_TOGETHER, "🤞 $from te prometió algo", data["text"].orEmpty(), extra = Push.EXTRA_OPEN_DUO)
+            "minu.promise.kept" -> notify(20, Push.CHANNEL_TOGETHER, "🤞 $from cumplió su promesa", "“${data["text"].orEmpty()}”. Agradécele en Dúo.", extra = Push.EXTRA_OPEN_DUO)
+            "minu.promise.thanks" -> notify(20, Push.CHANNEL_TOGETHER, "💛 $from te agradeció la promesa cumplida", "“${data["text"].orEmpty()}”", extra = Push.EXTRA_OPEN_DUO)
             "minu.terms" -> notify(
                 11, Push.CHANNEL_TOGETHER, "🧶 $from quiere despertar a Minu",
                 "Alguien duerme en su hilo rojo. Entra a Dúo, lee cómo cuida sus datos y acepta tú también.",

@@ -693,3 +693,127 @@ test('Minu: conexión diaria (toque, pregunta del día, gracias por y buenas not
     fakeNow = null;
   }
 });
+
+test('Minu: confianza y reparación (Buzón, Tregua, Promesas y cuidado)', async () => {
+  const a = (await register('minu_sara')).body.token;
+  const b = (await register('minu_leo')).body.token;
+  await api('POST', '/partner/request', { username: 'minu_leo' }, a);
+  await api('POST', '/partner/accept', null, b);
+  const minuOf = async (token) => (await api('GET', '/duo', null, token)).body.minu;
+  try {
+    fakeNow = new Date('2026-11-10T15:00:00Z');
+    assert.equal((await api('POST', '/duo/truce', null, a)).status, 403); // sin términos, nada
+    await api('POST', '/duo/terms/accept', null, a);
+    let duo = (await api('POST', '/duo/terms/accept', null, b)).body;
+    assert.deepEqual(duo.minu.trust.unsaid, { incoming: [], sent: [] });
+    assert.equal(duo.minu.trust.truce, null);
+    assert.deepEqual(duo.minu.trust.promises, { kept: 0, items: [] });
+    const born = duo.minu.pet.energy;
+
+    // Cuidado: responde solo a quien escribe y no guarda nada
+    const risky = (await api('POST', '/minu/care', { texts: ['Siento miedo', 'cuando me empujaste', 'que hablemos'] }, a)).body;
+    assert.equal(risky.risk, true);
+    assert.equal(risky.help.country, 'Colombia');
+    const calm = (await api('POST', '/minu/care', { texts: ['Me muero de risa contigo'] }, a)).body;
+    assert.deepEqual(calm, { risk: false, kinds: [], help: null });
+
+    // Buzón: las tres partes, sellado, sin "visto" y nunca en la memoria
+    assert.equal((await api('POST', '/duo/unsaid', { feel: 'triste', when: '', need: 'algo' }, a)).status, 400);
+    pushes.length = 0;
+    const letter = { feel: 'un poco sola', when: 'miras el celular en la cena', need: 'que cenemos sin pantallas' };
+    duo = (await api('POST', '/duo/unsaid', letter, a)).body;
+    const [sent] = duo.minu.trust.unsaid.sent;
+    assert.equal(sent.feel, 'un poco sola');
+    assert.equal(sent.thanked, false);
+    assert.equal('opened' in sent || 'openedAt' in sent, false);
+    const notice = pushes.find((p) => p.data.type === 'minu.unsaid');
+    assert.ok(notice);
+    assert.equal(JSON.stringify(notice.data).includes('sola'), false); // la notificación no lleva el contenido
+    assert.equal((await api('POST', '/duo/unsaid', letter, a)).status, 429); // una a la vez
+    let minuB = await minuOf(b);
+    const [sealed] = minuB.trust.unsaid.incoming;
+    assert.equal(sealed.sealed, true);
+    assert.equal(sealed.feel, undefined);
+    assert.equal(sealed.fromName, 'minu_sara');
+    assert.equal((await api('POST', `/duo/unsaid/${sealed.id}/thanks`, null, b)).status, 409); // primero abrirla
+    assert.equal((await api('POST', `/duo/unsaid/${sealed.id}/open`, null, a)).status, 409); // no la propia
+    pushes.length = 0;
+    duo = (await api('POST', `/duo/unsaid/${sealed.id}/open`, null, b)).body;
+    assert.equal(pushes.length, 0); // abrir no avisa a nadie
+    assert.equal(duo.minu.trust.unsaid.incoming[0].need, 'que cenemos sin pantallas');
+    assert.equal((await minuOf(a)).trust.unsaid.sent[0].thanked, false);
+    assert.equal((await api('POST', `/duo/unsaid/${sealed.id}/reply`, { text: 'Tienes razón' }, b)).status, 409); // primero agradecer
+    duo = (await api('POST', `/duo/unsaid/${sealed.id}/thanks`, null, b)).body;
+    assert.equal(duo.minu.trust.unsaid.incoming[0].thanked, true);
+    await api('POST', `/duo/unsaid/${sealed.id}/reply`, { text: 'Tienes razón. Desde hoy, cena sin celular 💛' }, b);
+    let minuA = await minuOf(a);
+    assert.equal(minuA.trust.unsaid.sent[0].thanked, true);
+    assert.equal(minuA.trust.unsaid.sent[0].reply, 'Tienes razón. Desde hoy, cena sin celular 💛');
+    assert.equal(minuA.pet.energy, born); // el Buzón no se juega por puntos
+    const memory = await client.db('minu-test').collection('couple_memory').find({ text: /sola|pantallas|cena/ }).toArray();
+    assert.deepEqual(memory, []);
+
+    // Tregua: 20 minutos de calma, frases de reparación, nada queda guardado ni resta
+    pushes.length = 0;
+    duo = (await api('POST', '/duo/truce', null, b)).body;
+    let truce = duo.minu.trust.truce;
+    assert.equal(truce.phase, 'calm');
+    assert.equal(truce.mine, true);
+    assert.equal(truce.endsAt - truce.startedAt, 20 * 60_000);
+    assert.ok(pushes.some((p) => p.data.type === 'minu.truce'));
+    truce = (await minuOf(a)).trust.truce;
+    assert.equal(truce.mine, false);
+    assert.equal(truce.canExtend, false);
+    assert.equal((await api('POST', '/duo/truce/extend', null, a)).status, 403); // solo quien la pidió
+    assert.equal((await api('POST', '/duo/truce/repair', { text: 'Empecemos de nuevo' }, a)).status, 409); // aún es calma
+    duo = (await api('POST', '/duo/truce/extend', null, b)).body;
+    assert.equal(duo.minu.trust.truce.endsAt - duo.minu.trust.truce.startedAt, 40 * 60_000);
+    fakeNow = new Date('2026-11-10T15:41:00Z');
+    assert.equal((await minuOf(a)).trust.truce.phase, 'repair');
+    duo = (await api('POST', '/duo/truce/repair', { text: 'Empecemos de nuevo' }, a)).body;
+    assert.equal(duo.minu.trust.truce.myRepair, 'Empecemos de nuevo');
+    assert.equal((await minuOf(b)).trust.truce.partnerRepair, 'Empecemos de nuevo');
+    duo = (await api('POST', '/duo/truce/repair', { text: 'Te quiero aunque estemos molestos' }, b)).body;
+    assert.equal(duo.minu.trust.truce.phase, 'together');
+    assert.equal(duo.minu.pet.energy, born);
+    fakeNow = new Date('2026-11-10T16:20:00Z');
+    assert.equal((await minuOf(a)).trust.truce, null); // el reencuentro se va solo
+
+    // Promesas: recordatorio solo para quien promete; el otro agradece y Minu celebra
+    const due = Date.parse('2026-11-10T20:00:00Z');
+    assert.equal((await api('POST', '/duo/promises', { text: 'Te llamo a las 3', dueAt: Date.parse('2026-11-01T00:00:00Z') }, a)).status, 400);
+    pushes.length = 0;
+    duo = (await api('POST', '/duo/promises', { text: 'Te llamo a las 3', dueAt: due }, a)).body;
+    const [promise] = duo.minu.trust.promises.items;
+    assert.deepEqual({ ...promise, id: undefined }, { id: undefined, text: 'Te llamo a las 3', mine: true, byName: 'minu_sara', dueAt: due, kept: false, confirmed: false });
+    assert.ok(pushes.some((p) => p.data.type === 'minu.promise' && p.data.text === 'Te llamo a las 3'));
+    assert.equal((await api('POST', `/duo/promises/${promise.id}/kept`, null, b)).status, 409); // solo quien prometió
+    await api('POST', `/duo/promises/${promise.id}/kept`, null, a);
+    assert.equal((await api('POST', `/duo/promises/${promise.id}/confirm`, null, a)).status, 409); // no la propia
+    duo = (await api('POST', `/duo/promises/${promise.id}/confirm`, null, b)).body;
+    assert.equal(duo.minu.trust.promises.kept, 1);
+    assert.equal(duo.minu.trust.promises.items[0].confirmed, true);
+    assert.equal(duo.minu.pet.energy, born + 5);
+    assert.equal((await api('POST', `/duo/promises/${promise.id}/confirm`, null, b)).status, 409);
+
+    // Una promesa que no se cumple se borra sola a las 48 h, sin rastro ni reproche
+    await api('POST', '/duo/promises', { text: 'Lavo los platos', dueAt: Date.parse('2026-11-10T23:00:00Z') }, b);
+    fakeNow = new Date('2026-11-12T20:00:00Z');
+    assert.equal((await minuOf(a)).trust.promises.items.length, 2);
+    fakeNow = new Date('2026-11-13T23:30:00Z');
+    minuA = await minuOf(a);
+    assert.deepEqual(minuA.trust.promises.items, []); // la cumplida ya pasó su celebración y la otra se fue sola
+    assert.equal(minuA.trust.promises.kept, 1);
+    assert.equal(minuA.pet.mood.length > 0, true);
+
+    // Borrar mis datos se lleva mis cartas y promesas
+    await api('POST', '/duo/promises', { text: 'Te escribo al salir', dueAt: Date.parse('2026-11-14T01:00:00Z') }, a);
+    await api('DELETE', '/duo/minu/data', null, a);
+    await api('POST', '/duo/terms/accept', null, a);
+    minuB = await minuOf(b);
+    assert.deepEqual(minuB.trust.unsaid.incoming, []);
+    assert.deepEqual(minuB.trust.promises.items, []);
+  } finally {
+    fakeNow = null;
+  }
+});
