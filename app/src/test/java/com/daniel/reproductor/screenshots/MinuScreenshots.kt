@@ -63,6 +63,14 @@ import com.daniel.reproductor.ui.together.minu.MinuLoveQuizContent
 import com.daniel.reproductor.ui.together.minu.MinuRouletteContent
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import com.daniel.reproductor.cloud.MindKind
+import com.daniel.reproductor.cloud.MindLine
+import com.daniel.reproductor.cloud.MinuMindInfo
+import com.daniel.reproductor.ui.together.minu.LearningConstellation
+import com.daniel.reproductor.ui.together.minu.MindHouseCard
+import com.daniel.reproductor.ui.together.minu.MindLineCard
+import com.daniel.reproductor.ui.together.minu.MindThinkingCard
+import com.daniel.reproductor.ui.together.minu.MinuWakeContent
 import com.github.takahirom.roborazzi.captureRoboImage
 import org.junit.Rule
 import org.junit.Test
@@ -317,6 +325,51 @@ class MinuScreenshots {
         listOf(400L, 2500L).forEach { ms ->
             compose.mainClock.advanceTimeBy(ms)
             compose.onRoot().captureRoboImage(File("build/screenshots/minu/cumplidos_${ms}ms.png").path)
+        }
+    }
+
+    // ---------- Entrega 5: voz propia ----------
+
+    private fun mind(awake: Boolean, learned: Int = 30, line: MindLine? = null, mineOn: Boolean = true, partnerOn: Boolean = true) = MinuMindInfo(
+        awake = awake, wakesOn = "2026-12-01", daysLeft = if (awake) 0 else 30 - learned, learned = learned, learnTotal = 30,
+        mineOn = mineOn, partnerOn = partnerOn, enabled = mineOn && partnerOn, celebrate = awake, line = line, writing = false,
+    )
+
+    /** La tarjeta con el mensaje del día, la cuenta regresiva, la casita y la celebración del despertar. */
+    @Test
+    @Config(qualifiers = "w1300dp-h1350dp-hdpi")
+    fun mindScreens() {
+        compose.mainClock.autoAdvance = false
+        val cheer = MindLine("2026-12-01", MindKind.CHEER, "Me acordé de su atardecer con audífonos y todavía me dura el saltito en el corazón. ¡Qué bonito se ven juntos!")
+        val dedication = MindLine("2026-12-02", MindKind.DEDICATION, "Su canción del inicio me tiene tarareando. ¿Quién se anima hoy a dedicar una que suene a ese primer día?")
+        compose.setContent {
+            ReproductorTheme {
+                Row(Modifier.background(MaterialTheme.colorScheme.surfaceContainerLow).padding(16.dp), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                    Column(Modifier.width(400.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                        MinuEntry(MinuInfo(MinuTerms(1, true, true, false), pet, daily, null, null, mind(true, line = cheer)), "Ana", {}, {})
+                        MindLineCard(dedication, onDedicate = {}, animate = false)
+                        MindThinkingCard("Minu")
+                        MinuEntry(MinuInfo(MinuTerms(1, true, true, false), pet, daily, null, null, mind(false, learned = 18)), "Ana", {}, {})
+                    }
+                    Column(Modifier.width(400.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                        MindHouseCard(mind(false, learned = 18), pet, "Ana", {}, {})
+                        MindHouseCard(mind(true), pet, "Ana", {}, {})
+                        MindHouseCard(mind(true, partnerOn = false), pet, "Ana", {}, {})
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            LearningConstellation(3, 30, 0f, Modifier.width(120.dp))
+                            LearningConstellation(30, 30, 0.5f, Modifier.width(120.dp))
+                            LearningConstellation(30, 30, 1f, Modifier.width(120.dp))
+                        }
+                    }
+                    Column(Modifier.width(420.dp)) {
+                        MinuWakeContent(pet, mind(true, line = cheer), "Ana", onDone = {})
+                    }
+                }
+            }
+        }
+        listOf(600L, 3500L).forEach { ms ->
+            compose.mainClock.advanceTimeBy(ms)
+            compose.onRoot().captureRoboImage(File("build/screenshots/minu/voz_${ms}ms.png").path)
         }
     }
 }

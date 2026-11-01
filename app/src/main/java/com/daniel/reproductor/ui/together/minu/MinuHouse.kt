@@ -64,6 +64,8 @@ class MinuHouseActions(
     val erase: () -> Unit,
     val help: () -> Unit = {},
     val loveTest: () -> Unit = {},
+    val mindOn: (Boolean) -> Unit = {},
+    val rehearse: () -> Unit = {},
 )
 
 /**
@@ -72,7 +74,14 @@ class MinuHouseActions(
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun MinuHouse(pet: MinuPet, partnerName: String, actions: MinuHouseActions, loveDone: Boolean = false, onDismiss: () -> Unit) {
+fun MinuHouse(
+    pet: MinuPet,
+    partnerName: String,
+    actions: MinuHouseActions,
+    loveDone: Boolean = false,
+    mind: com.daniel.reproductor.cloud.MinuMindInfo? = null,
+    onDismiss: () -> Unit,
+) {
     val c = MaterialTheme.colorScheme
     val style = LocalAppStyle.current
     var renaming by rememberSaveable { mutableStateOf(false) }
@@ -147,6 +156,9 @@ fun MinuHouse(pet: MinuPet, partnerName: String, actions: MinuHouseActions, love
                 MinuVoice.speciesBlurb(pet.species) + " Si eligen otra forma, se la propongo a $partnerName y conservo todo lo que he crecido.",
                 style = MaterialTheme.typography.bodySmall, color = c.onSurfaceVariant,
             )
+
+            // Lo que Minu va aprendiendo de ustedes y el interruptor de sus mensajes personalizados
+            mind?.let { MindHouseCard(it, pet, partnerName, onToggle = actions.mindOn, onSecret = actions.rehearse) }
 
             // Cómo te gusta que te quieran: opcional, solo afina mis ideas
             Surface(

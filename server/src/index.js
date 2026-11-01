@@ -1,6 +1,7 @@
 import http from 'node:http';
 import { MongoClient } from 'mongodb';
 import { createApp } from './app.js';
+import { mindWriterFromEnv } from './mind-writer.js';
 import { attachRealtime } from './realtime.js';
 import { ensureIndexes } from './db.js';
 import { createGoogleVerifier, createPush } from './services.js';
@@ -33,10 +34,12 @@ await ensureIndexes(db);
 const services = {
   verifyGoogle: createGoogleVerifier(list(process.env.GOOGLE_CLIENT_IDS)),
   push: createPush(db, process.env.FIREBASE_SERVICE_ACCOUNT),
+  mindWriter: mindWriterFromEnv(),
 };
 console.log(
   `Google: ${services.verifyGoogle ? 'activado' : 'desactivado'} · ` +
-    `Notificaciones: ${services.push.enabled ? 'activadas' : 'desactivadas'}`,
+    `Notificaciones: ${services.push.enabled ? 'activadas' : 'desactivadas'} · ` +
+    `Voz de Minu: ${services.mindWriter ? services.mindWriter.model : 'banco de frases (falta MIND_API_KEY)'}`,
 );
 
 const realtime = { notify: () => false, isOnline: () => false };

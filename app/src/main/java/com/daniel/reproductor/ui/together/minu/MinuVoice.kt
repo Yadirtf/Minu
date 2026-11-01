@@ -44,6 +44,14 @@ object MinuVoice {
         return options[(today.toEpochDay() % options.size).toInt()]
     }
 
+    /** La cuenta regresiva mientras aprende de ustedes (nunca dice cómo). */
+    fun learning(daysLeft: Int) = when {
+        daysLeft <= 0 -> "Hoy ya los conozco un poquito."
+        daysLeft == 1 -> "Mañana ya los conoceré mejor."
+        daysLeft < 7 -> "En $daysLeft días ya los conoceré mejor. ¡Ya casi!"
+        else -> "En $daysLeft días ya los conoceré mejor."
+    }
+
     fun moodLabel(mood: PetMood) = when (mood) {
         PetMood.RADIANT -> "Radiante"
         PetMood.HAPPY -> "Contento"

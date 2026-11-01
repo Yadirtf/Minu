@@ -3,13 +3,15 @@ import { dailyView, eraseMyDaily } from './daily.js';
 import { ensurePet, erasePetEventsBy, petView } from './pet.js';
 import { eraseMyTrust, trustView } from './trust.js';
 import { eraseMyNovelty, noveltyView } from './novelty.js';
+import { eraseMyMind, mindView } from './mind.js';
 
 /**
  * Términos de privacidad de Minu y el estado que ve la app. Cada miembro acepta la versión vigente; las
  * funciones de la mascota solo funcionan cuando los dos aceptaron. Si los términos cambian, se sube
  * TERMS_VERSION y los dos vuelven a aceptar (sin perder nada).
  */
-export const TERMS_VERSION = 1;
+// v2 (2026-11): el mensaje del día se redacta con un servicio externo a partir de un resumen corto
+export const TERMS_VERSION = 2;
 
 export function termsView(couple, me, partner) {
   const accepted = (id) => (couple?.terms?.[String(id)]?.version ?? 0) >= TERMS_VERSION;
@@ -43,7 +45,8 @@ export async function acceptTerms(db, me, today, now = new Date()) {
 
 /**
  * Lo de Minu que va dentro de GET /duo: términos y, si los dos aceptaron, la mascota y lo del día
- * (toques, pregunta del día, frasco de gracias y buenas noticias) y lo de confianza (Buzón, Tregua, Promesas).
+ * (toques, pregunta del día, frasco de gracias y buenas noticias), lo de confianza (Buzón, Tregua, Promesas),
+ * la novedad (Aventura, Cumplidos) y su voz propia (mensaje del día redactado por el servicio configurado).
  */
 export async function minuState(db, couple, me, today, joinedOn, now = new Date()) {
   const terms = termsView(couple, me._id, me.partnerId);
@@ -51,7 +54,9 @@ export async function minuState(db, couple, me, today, joinedOn, now = new Date(
   const [daily, trust, novelty] = pet
     ? await Promise.all([dailyView(db, couple._id, me, today, pet.stage, now), trustView(db, couple, me, now), noveltyView(db, couple, me, today, now)])
     : [null, null, null];
-  return { terms, pet, daily, trust, novelty };
+  // La voz propia de Minu: va después porque usa su ánimo y la aventura de la semana
+  const mind = pet ? await mindView(db, couple, me, today, joinedOn, pet, { adventure: novelty?.adventure, now }) : null;
+  return { terms, pet, daily, trust, novelty, mind };
 }
 
 /**
@@ -66,4 +71,5 @@ export async function eraseMyMinuData(db, me) {
   await eraseMyDaily(db, key, me);
   await eraseMyTrust(db, key, me);
   await eraseMyNovelty(db, key, me);
+  await eraseMyMind(db, key, me);
 }

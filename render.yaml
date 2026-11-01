@@ -21,5 +21,9 @@ services:
         sync: false
       - key: FIREBASE_SERVICE_ACCOUNT # contenido completo del JSON de la cuenta de servicio de Firebase
         sync: false
+      - key: MIND_API_KEY # llave de Groq (console.groq.com → API Keys) para el mensaje del día de Minu; sin ella usa su banco de frases
+        sync: false
+      # Opcionales para cambiar de proveedor (cualquier API compatible con OpenAI):
+      # MIND_BASE_URL (por defecto https://api.groq.com/openai/v1) y MIND_MODEL (por defecto openai/gpt-oss-120b)
       - key: JWT_SECRET # se genera solo
         generateValue: true

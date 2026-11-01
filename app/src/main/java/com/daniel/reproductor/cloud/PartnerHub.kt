@@ -96,6 +96,7 @@ class PartnerHub(
     val events: SharedFlow<HubEvent> = _events.asSharedFlow()
 
     private val foreground = MutableStateFlow(false)
+    private var mindRetry: Job? = null
     private var socket: WebSocket? = null
     private var reconnectJob: Job? = null
     private var djJob: Job? = null
@@ -193,7 +194,21 @@ class PartnerHub(
             runCatching { PromiseReminders.sync(context, info?.minu?.trust?.promises) }
             runCatching { SurpriseReminder.sync(context, info?.minu?.novelty?.compliments?.nextOn) }
         }
+        // Minu está escribiendo el mensaje de hoy: llega por tiempo real; si el aviso se pierde, se pide otra vez
+        if (info?.minu?.mind?.writing == true && mindRetry?.isActive != true) {
+            mindRetry = scope.launch {
+                kotlinx.coroutines.delay(MIND_RETRY_MS)
+                refreshDuo()
+            }
+        }
     }
+
+    // ---------- Voz propia de Minu ----------
+
+    suspend fun setMindOn(on: Boolean) = setDuo(api.setMindOn(on))
+    suspend fun seeMindWake() = setDuo(api.seeMindWake())
+    suspend fun mindRehearsal() = api.mindRehearsal()
+    suspend fun rehearseMind(id: String) = api.rehearseMind(id)
 
     // ---------- Pareja ----------
 
@@ -554,6 +569,7 @@ class PartnerHub(
 
     companion object {
         private const val SAVED_EMOJI = "💚"
+        private const val MIND_RETRY_MS = 10_000L
 
         /** Lanza el error con un mensaje claro para la pantalla. */
         suspend fun <T> userAction(block: suspend () -> T): Result<T> =

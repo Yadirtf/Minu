@@ -8,6 +8,7 @@ import { answerCapsule, dedicationDays, ensureCapsule, joinedOn, missionsView, m
 import { minuAllowed, minuState } from './minu.js';
 import { remember } from './memory.js';
 import { registerMinuRoutes } from './minuRoutes.js';
+import { configureMind } from './mind.js';
 import { recordPetEvent } from './pet.js';
 
 const USERNAME = /^[a-z0-9_.]{3,24}$/;
@@ -22,6 +23,11 @@ export function createApp(db, config, realtime, services = {}) {
   const verifyGoogle = services.verifyGoogle ?? null;
   const clock = services.clock ?? (() => new Date()); // las pruebas mueven el reloj para simular días
   const allowed = new Set((config.allowedEmails ?? []).map((e) => e.toLowerCase()));
+  // La voz propia de Minu: quién redacta (sin llave, banco de frases) y cómo avisar que hay mensaje nuevo
+  configureMind({
+    writer: services.mindWriter ?? null,
+    notify: (members) => members.forEach((id) => realtime.notify(id, { type: 'duo.update' })),
+  });
   const app = express();
   app.disable('x-powered-by');
   app.use(express.json({ limit: '3mb' }));
