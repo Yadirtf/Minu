@@ -43,6 +43,26 @@ import com.daniel.reproductor.ui.together.minu.MinuEntry
 import com.daniel.reproductor.ui.together.minu.MinuVoice
 import com.daniel.reproductor.ui.together.minu.SealedEnvelope
 import com.daniel.reproductor.ui.together.minu.TruceCard
+import com.daniel.reproductor.cloud.Adventure
+import com.daniel.reproductor.cloud.AdventurePlan
+import com.daniel.reproductor.cloud.Compliment
+import com.daniel.reproductor.cloud.ComplimentBox
+import com.daniel.reproductor.cloud.Dedication
+import com.daniel.reproductor.cloud.LoveOption
+import com.daniel.reproductor.cloud.LoveQuestion
+import com.daniel.reproductor.cloud.LoveState
+import com.daniel.reproductor.cloud.MinuNovelty
+import com.daniel.reproductor.cloud.PlanKind
+import com.daniel.reproductor.data.db.Song
+import com.daniel.reproductor.ui.together.minu.AdventureActions
+import com.daniel.reproductor.ui.together.minu.ComplimentActions
+import com.daniel.reproductor.ui.together.minu.GiftBox
+import com.daniel.reproductor.ui.together.minu.MinuAdventureContent
+import com.daniel.reproductor.ui.together.minu.MinuComplimentsContent
+import com.daniel.reproductor.ui.together.minu.MinuLoveQuizContent
+import com.daniel.reproductor.ui.together.minu.MinuRouletteContent
+import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.performClick
 import com.github.takahirom.roborazzi.captureRoboImage
 import org.junit.Rule
 import org.junit.Test
@@ -191,5 +211,112 @@ class MinuScreenshots {
         }
         compose.mainClock.advanceTimeBy(500)
         compose.onRoot().captureRoboImage(File("build/screenshots/minu/cuidado.png").path)
+    }
+
+    // ---------- Entrega 4: novedad ----------
+
+    private val plans = listOf(
+        AdventurePlan("a003", PlanKind.HOME, "🍝", "Cocinen algo que nunca han probado", "Elijan una receta de otro país y cocínenla juntos, con su música de fondo.", 2),
+        AdventurePlan("a104", PlanKind.OUT, "🌅", "Atardecer con audífonos", "Busquen un lugar alto, compartan audífonos y miren caer el sol.", 1),
+        AdventurePlan("a207", PlanKind.CREATE, "🎨", "Retrátense sin mirar", "Dibújense el uno al otro sin ver el papel. Prohibido reírse (imposible).", 1),
+    )
+    private fun adventure(myVote: String? = null, partnerVote: String? = null, chosen: AdventurePlan? = null, done: Boolean = false, rating: Int? = null) =
+        Adventure("2026-11-09", plans, myVote, partnerVote, chosen, true, done, if (done) now else null, null, false, null, rating, null)
+    private val noAdventure = AdventureActions({}, {}, {}, { _, _ -> }, { _, _ -> }, {})
+    private val songs = listOf(
+        Song("v1", "Coldplay - Yellow", "Coldplay", 266, ""),
+        Song("v2", "Bad Bunny - Ojitos Lindos", "Bad Bunny", 258, ""),
+    )
+    private val novelty = MinuNovelty(
+        adventure(partnerVote = "a104"),
+        ComplimentBox(listOf(Compliment("c1", "Cómo te ríes de mis chistes malos aunque sean malísimos.", "Ana", "2026-11-12", false, false)), "2026-11-20", 2, emptyList(), false),
+        LoveState(true, true, "Hoy dile algo concreto que admiras de Ana: las palabras cuentan."),
+    )
+
+    /** La tarjeta con la fila de novedad y la Aventura en sus tres momentos: votar, elegida y vivida. */
+    @Test
+    @Config(qualifiers = "w1680dp-h1450dp-hdpi")
+    fun adventureScreens() {
+        compose.mainClock.autoAdvance = false
+        compose.setContent {
+            ReproductorTheme {
+                Row(Modifier.background(MaterialTheme.colorScheme.surfaceContainerLow).padding(16.dp), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                    Column(Modifier.width(380.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                        MinuEntry(MinuInfo(MinuTerms(1, true, true, false), pet, daily, trust, novelty), "Ana", {}, {})
+                    }
+                    Column(Modifier.width(400.dp).size(width = 400.dp, height = 1400.dp)) {
+                        MinuAdventureContent(pet, adventure(myVote = "a003", partnerVote = "a104"), "Ana", songs, null, noAdventure)
+                    }
+                    Column(Modifier.width(400.dp).size(width = 400.dp, height = 1400.dp)) {
+                        MinuAdventureContent(pet, adventure("a104", "a104", plans[1]), "Ana", songs, null, noAdventure)
+                    }
+                    Column(Modifier.width(400.dp).size(width = 400.dp, height = 1400.dp)) {
+                        MinuAdventureContent(pet, adventure("a104", "a104", plans[1], done = true, rating = 4), "Ana", songs, null, noAdventure)
+                    }
+                }
+            }
+        }
+        listOf(400L, 2500L).forEach { ms ->
+            compose.mainClock.advanceTimeBy(ms)
+            compose.onRoot().captureRoboImage(File("build/screenshots/minu/aventura_${ms}ms.png").path)
+        }
+    }
+
+    /** La Ruleta de citas en reposo y después de girar (con la cita que salió). */
+    @Test
+    fun rouletteScreen() {
+        compose.mainClock.autoAdvance = false
+        val dedications = songs.mapIndexed { i, s -> Dedication("d$i", i % 2 == 0, "Ana", s, "Para ti, siempre", false, now - i * 86_400_000L, null, emptyList()) }
+        compose.setContent {
+            ReproductorTheme {
+                Column(Modifier.background(MaterialTheme.colorScheme.surfaceContainerLow).size(width = 420.dp, height = 1000.dp)) {
+                    MinuRouletteContent(pet, "Ana", dedications, songs[0], partnerOnline = true, onPlay = { _, _ -> })
+                }
+            }
+        }
+        compose.mainClock.advanceTimeBy(500)
+        compose.onRoot().captureRoboImage(File("build/screenshots/minu/ruleta_reposo.png").path)
+        compose.onNodeWithText("¡Girar!").performClick()
+        compose.mainClock.advanceTimeBy(1500)
+        compose.onRoot().captureRoboImage(File("build/screenshots/minu/ruleta_girando.png").path)
+        compose.mainClock.advanceTimeBy(4000)
+        compose.onRoot().captureRoboImage(File("build/screenshots/minu/ruleta_cita.png").path)
+    }
+
+    /** Cumplidos a ciegas (la cajita abriéndose, el bolsillo y escribir otros tres) y el test opcional. */
+    @Test
+    @Config(qualifiers = "w1300dp-h1350dp-hdpi")
+    fun complimentsAndQuiz() {
+        compose.mainClock.autoAdvance = false
+        val quiz = listOf(
+            LoveQuestion("q1", LoveOption("Que me digas lo que admiras de mí", "words"), LoveOption("Una tarde entera solo para los dos", "time")),
+            LoveQuestion("q2", LoveOption("Un detalle pequeño que te recordó a mí", "gifts"), LoveOption("Un abrazo largo sin decir nada", "touch")),
+        )
+        compose.setContent {
+            ReproductorTheme {
+                Row(Modifier.background(MaterialTheme.colorScheme.surfaceContainerLow).padding(16.dp), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                    Column(Modifier.size(width = 400.dp, height = 1300.dp)) {
+                        MinuComplimentsContent(pet, novelty.compliments, "Ana", ComplimentActions({}, {}, {}))
+                    }
+                    Column(Modifier.size(width = 400.dp, height = 1300.dp)) {
+                        MinuComplimentsContent(
+                            pet, ComplimentBox(emptyList(), null, 0, emptyList(), askNew = true), "Ana", ComplimentActions({}, {}, {}),
+                        )
+                    }
+                    Column(Modifier.size(width = 400.dp, height = 1300.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                        MinuLoveQuizContent(pet, "Ana", quiz, onFinish = {}, onDone = {})
+                        Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                            GiftBox(0f, Modifier.size(110.dp))
+                            GiftBox(0.5f, Modifier.size(110.dp))
+                            GiftBox(1f, Modifier.size(110.dp))
+                        }
+                    }
+                }
+            }
+        }
+        listOf(400L, 2500L).forEach { ms ->
+            compose.mainClock.advanceTimeBy(ms)
+            compose.onRoot().captureRoboImage(File("build/screenshots/minu/cumplidos_${ms}ms.png").path)
+        }
     }
 }

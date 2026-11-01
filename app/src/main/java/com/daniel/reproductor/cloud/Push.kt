@@ -152,6 +152,13 @@ class MinuMessagingService : FirebaseMessagingService() {
             "minu.promise" -> notify(20, Push.CHANNEL_TOGETHER, "🤞 $from te prometió algo", data["text"].orEmpty(), extra = Push.EXTRA_OPEN_DUO)
             "minu.promise.kept" -> notify(20, Push.CHANNEL_TOGETHER, "🤞 $from cumplió su promesa", "“${data["text"].orEmpty()}”. Agradécele en Dúo.", extra = Push.EXTRA_OPEN_DUO)
             "minu.promise.thanks" -> notify(20, Push.CHANNEL_TOGETHER, "💛 $from te agradeció la promesa cumplida", "“${data["text"].orEmpty()}”", extra = Push.EXTRA_OPEN_DUO)
+            // Novedad
+            "minu.adventure.vote" -> notify(21, Push.CHANNEL_TOGETHER, "🗺️ $from votó por una aventura", "¿Coinciden? Mira los planes de la semana.", extra = Push.EXTRA_OPEN_DUO)
+            "minu.adventure.reshuffle" -> notify(21, Push.CHANNEL_TOGETHER, "🗺️ $from pidió otras propuestas", "Hay tres planes nuevos para la semana.", extra = Push.EXTRA_OPEN_DUO)
+            "minu.adventure.chosen" -> notify(21, Push.CHANNEL_TOGETHER, "🗺️ ¡Ya tienen aventura!", "Coincidieron con $from. Minu ya está emocionado.", extra = Push.EXTRA_OPEN_DUO)
+            "minu.adventure.photo" -> notify(21, Push.CHANNEL_TOGETHER, "📸 $from guardó la foto de su aventura", "Mírala en Dúo.", extra = Push.EXTRA_OPEN_DUO)
+            "minu.adventure.done" -> notify(21, Push.CHANNEL_TOGETHER, "🎉 ¡Aventura vivida!", "$from la marcó. Ya está en sus Recuerdos.", extra = Push.EXTRA_OPEN_DUO)
+            "minu.compliment.heart" -> notify(22, Push.CHANNEL_TOGETHER, "💛 A $from le llegó tu cumplido", "“${data["text"].orEmpty()}”", extra = Push.EXTRA_OPEN_DUO)
             "minu.terms" -> notify(
                 11, Push.CHANNEL_TOGETHER, "🧶 $from quiere despertar a Minu",
                 "Alguien duerme en su hilo rojo. Entra a Dúo, lee cómo cuida sus datos y acepta tú también.",

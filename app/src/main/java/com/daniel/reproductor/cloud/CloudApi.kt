@@ -127,7 +127,13 @@ data class MinuPet(
     val speciesProposal: PetProposal?,
 )
 
-data class MinuInfo(val terms: MinuTerms, val pet: MinuPet?, val daily: MinuDaily? = null, val trust: MinuTrust? = null)
+data class MinuInfo(
+    val terms: MinuTerms,
+    val pet: MinuPet?,
+    val daily: MinuDaily? = null,
+    val trust: MinuTrust? = null,
+    val novelty: MinuNovelty? = null,
+)
 
 /** Los cuatro gestos del Toque de Minu. */
 enum class TouchKind(val id: String, val emoji: String, val label: String, val sentence: String) {
@@ -229,6 +235,60 @@ data class PromiseBoard(val kept: Int, val items: List<MinuPromise>)
 /** Confianza y reparación: Buzón, Tregua (null si no hay) y Promesas pequeñas. */
 data class MinuTrust(val unsaid: UnsaidBox, val truce: Truce?, val promises: PromiseBoard)
 
+/** Tipos de plan de la Aventura de la semana: uno de cada uno cada lunes. */
+enum class PlanKind(val id: String, val label: String) {
+    HOME("home", "En casa"), OUT("out", "Para salir"), CREATE("create", "Para crear");
+    companion object { fun from(id: String?) = entries.firstOrNull { it.id == id } ?: HOME }
+}
+
+data class AdventurePlan(val id: String, val kind: PlanKind, val emoji: String, val title: String, val detail: String, val effort: Int)
+
+/**
+ * La Aventura de esta semana ([week] = su lunes). Mientras no hay [chosen], los dos votan entre [options];
+ * cuando coinciden, esa es su aventura. Al vivirla guardan una foto y una canción.
+ */
+data class Adventure(
+    val week: String,
+    val options: List<AdventurePlan>,
+    val myVote: String?,
+    val partnerVote: String?,
+    val chosen: AdventurePlan?,
+    val canReshuffle: Boolean,
+    val done: Boolean,
+    val doneAt: Long?,
+    val song: Song?,
+    val hasPhoto: Boolean,
+    val photoAt: Long?,
+    val myRating: Int?,
+    val partnerRating: Int?,
+)
+
+/** Un cumplido a ciegas que Minu ya soltó (el contenido de los pendientes nunca llega a la app). */
+data class Compliment(val id: String, val text: String, val fromName: String, val day: String, val seen: Boolean, val heart: Boolean)
+data class SentCompliment(val id: String, val text: String, val day: String, val heart: Boolean)
+
+/**
+ * [nextOn] = el día de la próxima sorpresa (solo la fecha, para avisar). [pending] = de los míos, cuántos
+ * faltan por soltar; [askNew] cuando ya se soltaron todos y Minu pide otros tres.
+ */
+data class ComplimentBox(
+    val received: List<Compliment>,
+    val nextOn: String?,
+    val pending: Int,
+    val delivered: List<SentCompliment>,
+    val askNew: Boolean,
+) {
+    val surprise get() = received.firstOrNull { !it.seen }
+}
+
+/** Si cada uno ya hizo el test y la sugerencia del día (nunca una etiqueta). */
+data class LoveState(val mine: Boolean, val partner: Boolean, val suggestion: String?)
+
+data class MinuNovelty(val adventure: Adventure, val compliments: ComplimentBox, val love: LoveState)
+
+data class LoveOption(val text: String, val lang: String)
+data class LoveQuestion(val id: String, val a: LoveOption, val b: LoveOption)
+
 data class HelpLine(val name: String, val number: String, val note: String)
 data class HelpLines(val country: String, val lines: List<HelpLine>, val elsewhere: String)
 
@@ -243,6 +303,7 @@ data class MinuContent(
     val feelStarters: List<String> = emptyList(),
     val needStarters: List<String> = emptyList(),
     val help: HelpLines? = null,
+    val loveQuiz: List<LoveQuestion> = emptyList(),
 )
 
 data class DuoInfo(
@@ -482,7 +543,58 @@ class CloudApi(baseClient: OkHttpClient, private val session: Session) {
             feelStarters = strings(starters?.optJSONArray("feel")),
             needStarters = strings(starters?.optJSONArray("need")),
             help = json.optJSONObject("help")?.let(::parseHelp),
+            loveQuiz = objects(json.optJSONArray("loveQuiz")).map { q ->
+                fun opt(o: JSONObject?) = LoveOption(o?.optString("text").orEmpty(), o?.optString("lang").orEmpty())
+                LoveQuestion(q.optString("id"), opt(q.optJSONObject("a")), opt(q.optJSONObject("b")))
+            },
         )
+    }
+
+    // ---------- Novedad ----------
+
+    suspend fun voteAdventure(planId: String): DuoInfo? = parseDuo(call("POST", "/duo/adventure/vote", JSONObject().put("planId", planId)))
+    suspend fun reshuffleAdventure(): DuoInfo? = parseDuo(call("POST", "/duo/adventure/reshuffle", JSONObject()))
+    suspend fun completeAdventure(song: Song?): DuoInfo? =
+        parseDuo(call("POST", "/duo/adventure/done", JSONObject().apply { song?.let { put("song", songJson(it)) } }))
+    suspend fun rateAdventure(week: String, stars: Int): DuoInfo? =
+        parseDuo(call("POST", "/duo/adventures/$week/rate", JSONObject().put("stars", stars)))
+    suspend fun adventuresOf(month: String): List<Adventure> =
+        objects(call("GET", "/duo/adventures?month=$month").optJSONArray("items")).map(::parseAdventure)
+    suspend fun writeCompliments(texts: List<String>): DuoInfo? =
+        parseDuo(call("POST", "/duo/compliments", JSONObject().put("texts", JSONArray(texts))))
+    suspend fun seeCompliment(id: String): DuoInfo? = parseDuo(call("POST", "/duo/compliments/$id/seen", JSONObject()))
+    suspend fun heartCompliment(id: String): DuoInfo? = parseDuo(call("POST", "/duo/compliments/$id/heart", JSONObject()))
+    suspend fun answerLoveQuiz(answers: List<String>): DuoInfo? =
+        parseDuo(call("POST", "/duo/love", JSONObject().put("answers", JSONArray(answers))))
+
+    /** Sube la foto de la aventura (JPEG ya reducido). */
+    suspend fun uploadAdventurePhoto(week: String, jpeg: ByteArray): DuoInfo? = parseDuo(
+        bytesCall("PUT", "/duo/adventures/$week/photo", jpeg.toRequestBody("image/jpeg".toMediaType())).let { JSONObject(String(it)) },
+    )
+
+    /** Descarga la foto de la aventura (null si no hay). */
+    suspend fun adventurePhoto(week: String): ByteArray? = runCatching { bytesCall("GET", "/duo/adventures/$week/photo", null) }.getOrNull()
+
+    private suspend fun bytesCall(method: String, path: String, body: okhttp3.RequestBody?): ByteArray = withContext(Dispatchers.IO) {
+        val token = session.account.value?.token ?: throw UserFacingException("Inicia sesión primero.")
+        val request = Request.Builder()
+            .url(session.serverUrl + path)
+            .method(method, body)
+            .header("Authorization", "Bearer $token")
+            .header("X-Timezone", java.time.ZoneId.systemDefault().id)
+            .build()
+        try {
+            client.newCall(request).execute().use { res ->
+                val bytes = res.body.bytes()
+                if (!res.isSuccessful) {
+                    val error = runCatching { JSONObject(String(bytes)).optString("error") }.getOrNull()
+                    throw UserFacingException(error?.ifBlank { null } ?: "Error del servidor (${res.code}).")
+                }
+                bytes
+            }
+        } catch (e: IOException) {
+            throw UserFacingException("No se pudo conectar con el servidor. Intenta de nuevo en un momento.", e)
+        }
     }
 
     // ---------- Confianza y reparación ----------
@@ -619,7 +731,53 @@ class CloudApi(baseClient: OkHttpClient, private val session: Session) {
                     speciesProposal = proposal("species"),
                 )
             }
-            return MinuInfo(terms, pet, json.optJSONObject("daily")?.let(::parseDaily), json.optJSONObject("trust")?.let(::parseTrust))
+            return MinuInfo(
+                terms, pet,
+                json.optJSONObject("daily")?.let(::parseDaily),
+                json.optJSONObject("trust")?.let(::parseTrust),
+                json.optJSONObject("novelty")?.let(::parseNovelty),
+            )
+        }
+
+        private fun parsePlan(p: JSONObject) = AdventurePlan(
+            p.optString("id"), PlanKind.from(p.optString("kind")), p.optString("emoji"), p.optString("title"), p.optString("detail"), p.optInt("effort", 2),
+        )
+
+        fun parseAdventure(a: JSONObject) = Adventure(
+            week = a.optString("week"),
+            options = objects(a.optJSONArray("options")).map(::parsePlan),
+            myVote = a.optStringOrNull("myVote"),
+            partnerVote = a.optStringOrNull("partnerVote"),
+            chosen = a.optJSONObject("chosen")?.let(::parsePlan),
+            canReshuffle = a.optBoolean("canReshuffle"),
+            done = a.optBoolean("done"),
+            doneAt = if (a.isNull("doneAt")) null else a.optLong("doneAt"),
+            song = a.optJSONObject("song")?.let(::parseSong),
+            hasPhoto = a.optBoolean("hasPhoto"),
+            photoAt = if (a.isNull("photoAt")) null else a.optLong("photoAt"),
+            myRating = if (a.isNull("myRating")) null else a.optInt("myRating"),
+            partnerRating = if (a.isNull("partnerRating")) null else a.optInt("partnerRating"),
+        )
+
+        fun parseNovelty(n: JSONObject): MinuNovelty {
+            val c = n.optJSONObject("compliments") ?: JSONObject()
+            val box = ComplimentBox(
+                received = objects(c.optJSONArray("received")).map {
+                    Compliment(it.optString("id"), it.optString("text"), it.optString("fromName"), it.optString("day"), it.optBoolean("seen"), it.optBoolean("heart"))
+                },
+                nextOn = c.optStringOrNull("nextOn"),
+                pending = c.optInt("pending"),
+                delivered = objects(c.optJSONArray("delivered")).map {
+                    SentCompliment(it.optString("id"), it.optString("text"), it.optString("day"), it.optBoolean("heart"))
+                },
+                askNew = c.optBoolean("askNew", true),
+            )
+            val l = n.optJSONObject("love") ?: JSONObject()
+            return MinuNovelty(
+                parseAdventure(n.optJSONObject("adventure") ?: JSONObject()),
+                box,
+                LoveState(l.optBoolean("mine"), l.optBoolean("partner"), l.optStringOrNull("suggestion")),
+            )
         }
 
         fun parseTrust(t: JSONObject): MinuTrust {

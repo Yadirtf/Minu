@@ -63,15 +63,16 @@ class MinuHouseActions(
     val drop: (kind: String) -> Unit,
     val erase: () -> Unit,
     val help: () -> Unit = {},
+    val loveTest: () -> Unit = {},
 )
 
 /**
  * La casita de Minu: cómo está, cuánto ha crecido, su nombre y su forma (que se cambian de común
- * acuerdo), lo que viene pronto y el botón para borrar lo que le contaste.
+ * acuerdo), el test opcional de cómo les gusta que los quieran y el botón para borrar lo que le contaste.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun MinuHouse(pet: MinuPet, partnerName: String, actions: MinuHouseActions, onDismiss: () -> Unit) {
+fun MinuHouse(pet: MinuPet, partnerName: String, actions: MinuHouseActions, loveDone: Boolean = false, onDismiss: () -> Unit) {
     val c = MaterialTheme.colorScheme
     val style = LocalAppStyle.current
     var renaming by rememberSaveable { mutableStateOf(false) }
@@ -147,14 +148,24 @@ fun MinuHouse(pet: MinuPet, partnerName: String, actions: MinuHouseActions, onDi
                 style = MaterialTheme.typography.bodySmall, color = c.onSurfaceVariant,
             )
 
-            // Lo que viene
-            Text("Muy pronto en mi casita", style = MaterialTheme.typography.titleMedium)
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                listOf("🗺️\nAventura semanal", "🎲\nRuleta de citas", "💬\nCumplidos a ciegas").forEach { label ->
-                    Surface(color = c.surfaceContainerHigh, shape = RoundedCornerShape(16.dp), modifier = Modifier.weight(1f)) {
+            // Cómo te gusta que te quieran: opcional, solo afina mis ideas
+            Surface(
+                color = c.surfaceContainerHigh, shape = RoundedCornerShape(16.dp),
+                border = if (loveDone) null else BorderStroke(1.dp, THREAD_RED.copy(alpha = 0.45f)),
+                modifier = Modifier.fillMaxWidth().clickable(onClick = actions.loveTest),
+            ) {
+                Row(Modifier.padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Text("💞", style = MaterialTheme.typography.titleMedium)
+                    Spacer(Modifier.size(10.dp))
+                    Column(Modifier.weight(1f)) {
                         Text(
-                            label, textAlign = TextAlign.Center, style = MaterialTheme.typography.labelMedium,
-                            color = c.onSurfaceVariant, modifier = Modifier.padding(vertical = 10.dp, horizontal = 4.dp),
+                            if (loveDone) "Repetir \"¿Cómo te gusta que te quieran?\"" else "¿Cómo te gusta que te quieran?",
+                            style = MaterialTheme.typography.titleSmall,
+                        )
+                        Text(
+                            if (loveDone) "Ya me lo contaste. Si cambió algo, vuelve a hacerlo cuando quieras."
+                            else "10 preguntas opcionales para que mis ideas sean más suyas. Es una guía para conversar, no una ciencia exacta.",
+                            style = MaterialTheme.typography.bodySmall, color = c.onSurfaceVariant,
                         )
                     }
                 }

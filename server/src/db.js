@@ -25,6 +25,12 @@ export const goodNews = (db) => db.collection('good_news');
 export const unsaid = (db) => db.collection('unsaid');
 /** Promesas pequeñas: las no cumplidas se borran solas 48 h después de su hora. */
 export const promises = (db) => db.collection('promises');
+/** Aventura de la semana (_id = "<pareja>:<lunes>"): 3 planes, votos, la elegida y cómo les fue. */
+export const adventures = (db) => db.collection('adventures');
+/** La foto de cada aventura (JPEG reducido), aparte para no cargarla con el estado de Dúo. */
+export const adventurePhotos = (db) => db.collection('adventure_photos');
+/** Cumplidos a ciegas: cada uno con su día de entrega al azar (máximo uno por semana). */
+export const compliments = (db) => db.collection('compliments');
 /** Memoria de la pareja (capa 1): hechos tipados que cada función guarda para que Minu los recuerde. */
 export const coupleMemory = (db) => db.collection('couple_memory');
 
@@ -49,6 +55,9 @@ export async function ensureIndexes(db) {
   await unsaid(db).createIndex({ couple: 1, to: 1, createdAt: -1 });
   await unsaid(db).createIndex({ couple: 1, from: 1, createdAt: -1 });
   await promises(db).createIndex({ couple: 1, dueAt: 1 });
+  await adventures(db).createIndex({ couple: 1, week: -1 });
+  await compliments(db).createIndex({ couple: 1, to: 1, releaseOn: -1 });
+  await compliments(db).createIndex({ couple: 1, by: 1, releaseOn: -1 });
   await coupleMemory(db).createIndex({ couple: 1, kind: 1, day: -1 });
 }
 

@@ -168,6 +168,15 @@ class PartnerHub(
     suspend fun keepPromise(id: String) = setDuo(api.keepPromise(id))
     suspend fun confirmPromise(id: String) = setDuo(api.confirmPromise(id))
     suspend fun dropPromise(id: String) = setDuo(api.dropPromise(id))
+    suspend fun voteAdventure(planId: String) = setDuo(api.voteAdventure(planId))
+    suspend fun reshuffleAdventure() = setDuo(api.reshuffleAdventure())
+    suspend fun completeAdventure(song: Song?) = setDuo(api.completeAdventure(song))
+    suspend fun rateAdventure(week: String, stars: Int) = setDuo(api.rateAdventure(week, stars))
+    suspend fun uploadAdventurePhoto(week: String, jpeg: ByteArray) = setDuo(api.uploadAdventurePhoto(week, jpeg))
+    suspend fun writeCompliments(texts: List<String>) = setDuo(api.writeCompliments(texts))
+    suspend fun seeCompliment(id: String) = setDuo(api.seeCompliment(id))
+    suspend fun heartCompliment(id: String) = setDuo(api.heartCompliment(id))
+    suspend fun answerLoveQuiz(answers: List<String>) = setDuo(api.answerLoveQuiz(answers))
 
     /** Solo lo de Dúo (racha y fecha), sin pedir de nuevo pareja y cartas. */
     fun refreshDuo() {
@@ -180,7 +189,10 @@ class PartnerHub(
         _duo.value = info
         DuoPrefs.save(context, info?.origin?.startedOn, _partner.value?.partner?.displayName)
         // Recordatorios locales de mis promesas (sin pareja, se cancelan todos)
-        if (info == null || info.minu != null) runCatching { PromiseReminders.sync(context, info?.minu?.trust?.promises) }
+        if (info == null || info.minu != null) {
+            runCatching { PromiseReminders.sync(context, info?.minu?.trust?.promises) }
+            runCatching { SurpriseReminder.sync(context, info?.minu?.novelty?.compliments?.nextOn) }
+        }
     }
 
     // ---------- Pareja ----------
@@ -442,6 +454,27 @@ class PartnerHub(
         p.setMediaItems(songs.map { PlaybackItems.fromSong(it, files) })
         p.prepare()
         p.play()
+    }
+
+    /**
+     * Ruleta "Descubrir juntos": canciones parecidas a [seed] que ninguno de los dos ha dedicado ni tiene en
+     * [known], con la radio de YouTube Music para que siga sola. Devuelve cuántas encontró (0 = nada nuevo).
+     */
+    suspend fun playDiscovery(seed: Song, known: Set<String>): List<Song> {
+        val resolver = (context.applicationContext as com.daniel.reproductor.ReproductorApp).resolver
+        val page = resolver.radio(seed.videoId, com.daniel.reproductor.data.remote.SongSource.MUSIC)
+        val fresh = page.songs.filter { it.videoId != seed.videoId && it.videoId !in known }.distinctBy { it.videoId }.take(20)
+        if (fresh.isEmpty()) return emptyList()
+        val p = player()
+        p.setMediaItems(
+            fresh.mapIndexed { i, song ->
+                if (i == 0) PlaybackItems.fromSong(song, files, radio = com.daniel.reproductor.data.remote.SongSource.MUSIC)
+                else PlaybackItems.fromSong(song, files, suggested = true)
+            },
+        )
+        p.prepare()
+        p.play()
+        return fresh
     }
 
     /** Reproduce una canción en este celular (dedicatorias). */

@@ -288,7 +288,10 @@ internal fun AppRoot(
             // Una carta sellada, una promesa cumplida por agradecer o una frase de reparación esperando
             trust?.unsaid?.sealed?.isNotEmpty() == true ||
             trust?.promises?.items?.any { !it.mine && it.kept && !it.confirmed } == true ||
-            trust?.truce?.let { it.partnerRepair != null && it.myRepair == null } == true
+            trust?.truce?.let { it.partnerRepair != null && it.myRepair == null } == true ||
+            // Una sorpresa de Minu sin abrir, o tu pareja ya votó la aventura y tú aún no
+            m.novelty?.compliments?.surprise != null ||
+            m.novelty?.adventure?.let { it.chosen == null && it.partnerVote != null && it.myVote == null } == true
     } == true
     fun closeDrawerThen(action: () -> Unit) {
         action()

@@ -29,6 +29,7 @@ export const PET_SOURCES = {
   thanks: { points: 5, dailyCap: 10 },
   cheer: { points: 5, dailyCap: 10 }, // una buena noticia que recibió una respuesta entusiasta
   adventure: { points: 25, dailyCap: 25 },
+  compliment: { points: 5, dailyCap: 5 }, // un cumplido a ciegas que recibió un 💛 de vuelta
   promise: { points: 5, dailyCap: 10 },
 };
 

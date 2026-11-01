@@ -2,6 +2,7 @@ import { coupleKey, couples } from './db.js';
 import { dailyView, eraseMyDaily } from './daily.js';
 import { ensurePet, erasePetEventsBy, petView } from './pet.js';
 import { eraseMyTrust, trustView } from './trust.js';
+import { eraseMyNovelty, noveltyView } from './novelty.js';
 
 /**
  * Términos de privacidad de Minu y el estado que ve la app. Cada miembro acepta la versión vigente; las
@@ -47,10 +48,10 @@ export async function acceptTerms(db, me, today, now = new Date()) {
 export async function minuState(db, couple, me, today, joinedOn, now = new Date()) {
   const terms = termsView(couple, me._id, me.partnerId);
   const pet = terms.accepted ? await petView(db, couple, me._id, today, joinedOn) : null;
-  const [daily, trust] = pet
-    ? await Promise.all([dailyView(db, couple._id, me, today, pet.stage, now), trustView(db, couple, me, now)])
-    : [null, null];
-  return { terms, pet, daily, trust };
+  const [daily, trust, novelty] = pet
+    ? await Promise.all([dailyView(db, couple._id, me, today, pet.stage, now), trustView(db, couple, me, now), noveltyView(db, couple, me, today, now)])
+    : [null, null, null];
+  return { terms, pet, daily, trust, novelty };
 }
 
 /**
@@ -64,4 +65,5 @@ export async function eraseMyMinuData(db, me) {
   await erasePetEventsBy(db, key, me._id);
   await eraseMyDaily(db, key, me);
   await eraseMyTrust(db, key, me);
+  await eraseMyNovelty(db, key, me);
 }
