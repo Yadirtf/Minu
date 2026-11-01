@@ -33,7 +33,7 @@ import java.io.File
  */
 @RunWith(RobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
-@Config(sdk = [33], qualifiers = "w800dp-h1000dp-xhdpi")
+@Config(sdk = [33], qualifiers = "w800dp-h1000dp-xhdpi", application = android.app.Application::class)
 class MinuScreenshots {
 
     @get:Rule val compose = createComposeRule()

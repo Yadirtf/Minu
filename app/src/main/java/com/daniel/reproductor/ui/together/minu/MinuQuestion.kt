@@ -145,7 +145,7 @@ fun MinuQuestionSheet(
                                     reactions.forEach { r -> AssistChip(onClick = { onReact(r) }, label = { Text(r) }) }
                                 }
                             }
-                            AnswerCard("Tú", question.mine ?: "", mine = true, reaction = question.partnerReaction?.let { "$partnerName: $it" })
+                            AnswerCard("Tú", question.mine, mine = true, reaction = question.partnerReaction?.let { "$partnerName: $it" })
                         }
                     }
                 }
