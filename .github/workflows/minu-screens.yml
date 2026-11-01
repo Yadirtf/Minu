@@ -9,6 +9,9 @@ on:
       - 'app/src/test/java/com/daniel/reproductor/screenshots/MinuScreenshots.kt'
       - '.github/workflows/minu-screens.yml'
 
+permissions:
+  contents: write   # para dejar las capturas en la rama capturas-minu
+
 jobs:
   screens:
     runs-on: ubuntu-latest
@@ -30,3 +33,13 @@ jobs:
           name: capturas-minu
           path: app/build/screenshots/minu/
           retention-days: 14
+      # Copia en una rama aparte (un solo commit, se reemplaza cada vez) para verlas sin descargar el zip
+      - name: Publicar en la rama capturas-minu
+        run: |
+          cd app/build/screenshots/minu
+          git init -q -b capturas-minu
+          git config user.name "github-actions"
+          git config user.email "github-actions@users.noreply.github.com"
+          git add -A
+          git commit -qm "Capturas de Minu de ${GITHUB_SHA::7}"
+          git push -qf "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git" capturas-minu
