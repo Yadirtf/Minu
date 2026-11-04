@@ -943,7 +943,7 @@ test('Minu: novedad (Aventura de la semana, Cumplidos a ciegas y lenguajes del a
   }
 });
 
-test('Minu: voz propia (despierta al mes, redacta en segundo plano, barandas, ajuste y ensayo)', async () => {
+test('Minu: voz propia (despierta al mes, redacta en segundo plano, barandas y ajuste)', async () => {
   try {
     fakeNow = new Date('2027-01-31T15:00:00Z');
     const a = (await register('mind_sara')).body.token;
@@ -1005,15 +1005,7 @@ test('Minu: voz propia (despierta al mes, redacta en segundo plano, barandas, aj
     assert.equal(mindPrompts.length, 3);
     assert.deepEqual({ line: mind.line, writing: mind.writing }, { line: null, writing: false });
 
-    // Ensayo: 30 situaciones (sin el encargo), redactar una y revisar un texto
-    const cases = (await api('GET', '/duo/minu/mind/rehearsal', null, a)).body.cases;
-    assert.equal(cases.length, 30);
-    assert.equal(cases[0].prompt, undefined);
-    mindReplies.push('Hoy podrían cocinar juntos esa receta que tanto les gusta, ¿se animan?');
-    const tried = (await api('POST', `/duo/minu/mind/rehearsal/${cases[0].id}`, null, a)).body;
-    assert.equal(tried.ok, true);
-    assert.equal(typeof tried.ms, 'number');
-    assert.equal((await api('POST', '/duo/minu/mind/rehearsal/nope', null, a)).status, 404);
+    // Revisar un texto con las barandas (sin redactar ni gastar cuota)
     const check = (await api('POST', '/duo/minu/mind/check', { text: 'Soy un asistente que los quiere mucho a los dos.' }, a)).body;
     assert.deepEqual(check, { ok: false, text: null, reason: 'banned' });
 

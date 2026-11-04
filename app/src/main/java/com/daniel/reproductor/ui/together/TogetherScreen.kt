@@ -107,7 +107,6 @@ import com.daniel.reproductor.ui.player.PlayerState
 import com.daniel.reproductor.ui.profile.ProfileButton
 import com.daniel.reproductor.ui.theme.LocalAppStyle
 import com.daniel.reproductor.ui.together.minu.MinuDailySheet
-import com.daniel.reproductor.ui.together.minu.MinuRehearsalSheet
 import com.daniel.reproductor.ui.together.minu.MinuWakeCelebration
 import com.daniel.reproductor.ui.together.minu.AdventureActions
 import com.daniel.reproductor.ui.together.minu.ComplimentActions
@@ -161,7 +160,6 @@ fun TogetherScreen(vm: TogetherViewModel, lib: LibraryViewModel, player: PlayerS
     var showMinuHouse by rememberSaveable { mutableStateOf(false) }
     var minuTermsOffered by rememberSaveable { mutableStateOf(false) }
     var dailySheet by rememberSaveable { mutableStateOf<MinuDailySheet?>(null) }
-    var showRehearsal by rememberSaveable { mutableStateOf(false) }
     val minuContent by vm.minuContent.collectAsStateWithLifecycle()
     val pastQuestions by vm.pastQuestions.collectAsStateWithLifecycle()
     val photos by vm.photos.collectAsStateWithLifecycle()
@@ -347,7 +345,6 @@ fun TogetherScreen(vm: TogetherViewModel, lib: LibraryViewModel, player: PlayerS
                 help = { vm.loadMinuContent(); vm.showHelp() },
                 loveTest = { showMinuHouse = false; dailySheet = MinuDailySheet.LOVE },
                 mindOn = { vm.setMindOn(it) },
-                rehearse = { showMinuHouse = false; showRehearsal = true },
             ),
             loveDone = minu.novelty?.love?.mine == true,
             mind = minu.mind,
@@ -470,13 +467,12 @@ fun TogetherScreen(vm: TogetherViewModel, lib: LibraryViewModel, player: PlayerS
         }
     }
 
-    // Minu despierta al mes: celebración una vez por persona (y el ensayo secreto desde la casita)
+    // Minu despierta al mes: celebración una vez por persona
     val mind = minu?.mind
     var wakeSeen by rememberSaveable { mutableStateOf(false) }
     if (pet != null && mind?.celebrate == true && !wakeSeen && dailySheet == null && !showMinuHouse) {
         MinuWakeCelebration(pet, mind, linkedPartner?.displayName.orEmpty(), onDone = { wakeSeen = true; vm.seeMindWake() })
     }
-    if (showRehearsal) MinuRehearsalSheet(vm.rehearsal, onDismiss = { showRehearsal = false })
 
     // Cuidado: encima de cualquier hoja, cuando algo suena a peligro o desde "Si algo no está bien"
     val care by vm.care.collectAsStateWithLifecycle()

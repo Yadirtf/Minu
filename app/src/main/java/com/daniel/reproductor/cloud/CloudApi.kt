@@ -317,10 +317,6 @@ data class MinuMindInfo(
     val writing: Boolean,
 )
 
-/** Una situación del ensayo (para revisar a mano cómo suena Minu). */
-data class MindRehearsalCase(val id: String, val kind: MindKind, val mood: String, val facts: List<String>)
-/** Lo que salió al ensayar: el texto crudo, si pasó las barandas (y si no, por qué) y cuánto tardó. */
-data class MindRehearsal(val raw: String?, val ok: Boolean, val text: String?, val reason: String?, val ms: Long)
 data class LoveQuestion(val id: String, val a: LoveOption, val b: LoveOption)
 
 data class HelpLine(val name: String, val number: String, val note: String)
@@ -588,13 +584,6 @@ class CloudApi(baseClient: OkHttpClient, private val session: Session) {
 
     suspend fun setMindOn(on: Boolean): DuoInfo? = parseDuo(call("PUT", "/duo/minu/mind", JSONObject().put("on", on)))
     suspend fun seeMindWake(): DuoInfo? = parseDuo(call("POST", "/duo/minu/mind/woke", JSONObject()))
-    suspend fun mindRehearsal(): List<MindRehearsalCase> = objects(call("GET", "/duo/minu/mind/rehearsal").optJSONArray("cases")).map {
-        MindRehearsalCase(it.optString("id"), MindKind.from(it.optString("kind")), it.optString("mood"), strings(it.optJSONArray("facts")))
-    }
-    /** Redacta una situación del ensayo en el servidor (no guarda nada). */
-    suspend fun rehearseMind(id: String): MindRehearsal = call("POST", "/duo/minu/mind/rehearsal/$id", JSONObject()).let {
-        MindRehearsal(it.optStringOrNull("raw"), it.optBoolean("ok"), it.optStringOrNull("text"), it.optStringOrNull("reason"), it.optLong("ms"))
-    }
 
     // ---------- Novedad ----------
 

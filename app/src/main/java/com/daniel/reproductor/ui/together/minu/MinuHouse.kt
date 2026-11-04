@@ -65,7 +65,6 @@ class MinuHouseActions(
     val help: () -> Unit = {},
     val loveTest: () -> Unit = {},
     val mindOn: (Boolean) -> Unit = {},
-    val rehearse: () -> Unit = {},
 )
 
 /**
@@ -158,7 +157,7 @@ fun MinuHouse(
             )
 
             // Lo que Minu va aprendiendo de ustedes y el interruptor de sus mensajes personalizados
-            mind?.let { MindHouseCard(it, pet, partnerName, onToggle = actions.mindOn, onSecret = actions.rehearse) }
+            mind?.let { MindHouseCard(it, pet, partnerName, onToggle = actions.mindOn) }
 
             // Cómo te gusta que te quieran: opcional, solo afina mis ideas
             Surface(

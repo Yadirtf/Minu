@@ -352,9 +352,9 @@ class MinuScreenshots {
                         MinuEntry(MinuInfo(MinuTerms(1, true, true, false), pet, daily, null, null, mind(false, learned = 18)), "Ana", {}, {})
                     }
                     Column(Modifier.width(400.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
-                        MindHouseCard(mind(false, learned = 18), pet, "Ana", {}, {})
-                        MindHouseCard(mind(true), pet, "Ana", {}, {})
-                        MindHouseCard(mind(true, partnerOn = false), pet, "Ana", {}, {})
+                        MindHouseCard(mind(false, learned = 18), pet, "Ana", {})
+                        MindHouseCard(mind(true), pet, "Ana", {})
+                        MindHouseCard(mind(true, partnerOn = false), pet, "Ana", {})
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                             LearningConstellation(3, 30, 0f, Modifier.width(120.dp))
                             LearningConstellation(30, 30, 0.5f, Modifier.width(120.dp))

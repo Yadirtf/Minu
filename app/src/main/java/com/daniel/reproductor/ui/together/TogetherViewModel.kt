@@ -319,12 +319,6 @@ class TogetherViewModel(
     fun setMindOn(on: Boolean) = action(if (on) "Mensajes personalizados encendidos" else "Listo, les hablo con mis frases de siempre") { hub.setMindOn(on) }
     fun seeMindWake() = action { hub.seeMindWake() }
 
-    /** El ensayo de las 30 situaciones: redacta en el servidor y muestra el veredicto, sin guardar. */
-    val rehearsal = com.daniel.reproductor.ui.together.minu.RehearsalActions(
-        load = { hub.mindRehearsal() },
-        run = { case -> hub.rehearseMind(case.id) },
-    )
-
     /** Fotos de aventuras ya bajadas, por semana (null = no hay o no se pudo). */
     private val _photos = MutableStateFlow<Map<String, androidx.compose.ui.graphics.ImageBitmap?>>(emptyMap())
     val photos: StateFlow<Map<String, androidx.compose.ui.graphics.ImageBitmap?>> = _photos.asStateFlow()
