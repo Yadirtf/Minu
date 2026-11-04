@@ -137,6 +137,37 @@ jobs:
           path: ${{ env.APK_NAME }}
           retention-days: 30
 
+      # Los clientes actualizan desde un repositorio público que solo guarda las APK (sin código).
+      # Guía: .github/ACTUALIZACIONES.md. Va antes del Release propio para que, si falla, se pueda repetir la versión.
+      - name: Revisar token del repositorio de actualizaciones
+        if: env.RELEASE_TAG != ''
+        env:
+          RELEASES_TOKEN: ${{ secrets.RELEASES_TOKEN }}
+          REPO_PRIVATE: ${{ github.event.repository.private }}
+        run: |
+          if [ -n "$RELEASES_TOKEN" ]; then
+            echo "PUBLISH_PUBLIC=1" >> "$GITHUB_ENV"
+          elif [ "$REPO_PRIVATE" = true ]; then
+            echo "::error::Falta el secret RELEASES_TOKEN: con el repositorio privado los celulares no recibirían la versión (ver .github/ACTUALIZACIONES.md)"
+            exit 1
+          else
+            echo "::warning::Sin RELEASES_TOKEN: la versión solo queda en este repositorio (ver .github/ACTUALIZACIONES.md)"
+          fi
+
+      - name: Publicar en el repositorio de actualizaciones
+        if: env.PUBLISH_PUBLIC == '1'
+        uses: softprops/action-gh-release@v2
+        with:
+          repository: ${{ vars.RELEASES_REPO || 'Yadirtf/Minu-releases' }}
+          token: ${{ secrets.RELEASES_TOKEN }}
+          tag_name: ${{ env.RELEASE_TAG }}
+          name: Minu ${{ env.RELEASE_TAG }}
+          body: |
+            Nueva versión de Minu (${{ env.VERSION_NAME }}).
+            Se instala encima de la anterior sin perder nada. Actualiza desde Obtainium.
+          files: ${{ env.APK_NAME }}
+          make_latest: true
+
       - name: Publicar Release
         if: env.RELEASE_TAG != ''
         uses: softprops/action-gh-release@v2

@@ -81,7 +81,7 @@ Los nombres deben ser exactos (mayúsculas incluidas). GitHub nunca vuelve a mos
 
 ## 4. Generar la APK
 
-- **Publicar una versión (lo normal):** pestaña **Actions → APK firmada → Run workflow**, escribe la versión (por ejemplo `1.2`) y pulsa **Run workflow**. En unos 10 minutos aparece en **Releases** como `Minu v1.2` con la APK adjunta, y Obtainium la detecta.
+- **Publicar una versión (lo normal):** pestaña **Actions → APK firmada → Run workflow**, escribe la versión (por ejemplo `1.2`) y pulsa **Run workflow**. En unos 10 minutos aparece como `Minu v1.2` con la APK adjunta en los Releases de este repositorio y de [Minu-releases](https://github.com/Yadirtf/Minu-releases), y Obtainium la detecta. Para eso hace falta el secret `RELEASES_TOKEN` (ver [ACTUALIZACIONES.md](ACTUALIZACIONES.md)).
   - No hay que editar `app/build.gradle.kts`: el `versionCode` sale de la versión (`1.2` → `10200`, `1.2.3` → `10203`).
   - Cada versión debe ser mayor que la anterior; si repites una, el workflow falla y te avisa.
   - También funciona con un tag desde la terminal: `git tag v1.2 && git push origin v1.2`.
