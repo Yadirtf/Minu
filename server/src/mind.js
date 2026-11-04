@@ -326,18 +326,7 @@ export async function eraseMyMind(db, key, me) {
   ]);
 }
 
-/** Ensaya una situación con el redactor configurado: el texto crudo, el veredicto y cuánto tardó. */
-export async function rehearseCase(pet, today, id) {
-  const c = rehearsal(pet, today).find((r) => r.id === id);
-  if (!c) return { error: 'Situación desconocida.', status: 404 };
-  if (!mindConfig.writer) return { raw: null, ok: false, text: null, reason: 'no_writer', ms: 0 };
-  const start = Date.now();
-  const { text: raw, error } = await draftWith(mindConfig.writer, c.prompt);
-  const verdict = raw ? guardLine(raw) : { ok: false, reason: error === 'busy' ? 'busy' : 'empty' };
-  return { raw, ok: verdict.ok, text: verdict.text ?? null, reason: verdict.reason ?? null, ms: Date.now() - start };
-}
-
-/** Las 30 situaciones de ensayo con el encargo que recibiría el redactor en cada una. */
+/** Las 30 situaciones de ensayo con el encargo que recibiría el redactor en cada una (para pruebas y para afinar el encargo). */
 export function rehearsal(pet, today) {
   return REHEARSAL.map((c) => ({
     id: c.id,

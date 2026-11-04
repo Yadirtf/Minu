@@ -96,8 +96,8 @@ export const LINE_MAX = 240;
 export const ATTEMPTS_PER_DAY = 3;
 
 /**
- * 30 situaciones para ensayar a mano desde la app (#58/#59). Cada una es un resumen de pareja
- * inventado + el día; el ensayo arma el mismo encargo que en la vida real y muestra si pasó las barandas.
+ * 30 situaciones de ensayo (#58/#59): parejas inventadas para revisar el encargo en las pruebas. Ya no
+ * se abren desde la app (el usuario lo pidió para que nadie entre sin querer).
  */
 export const REHEARSAL = [
   { id: 's01', kind: 'plan', mood: 'radiant', facts: ['Les gusta cocinar juntos.', 'Su canción: "Yellow" de Coldplay.'] },

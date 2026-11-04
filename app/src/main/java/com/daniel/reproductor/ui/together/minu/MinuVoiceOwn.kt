@@ -11,7 +11,6 @@ import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -251,19 +250,18 @@ fun LearningRow(mind: MinuMindInfo, petName: String, modifier: Modifier = Modifi
 
 /**
  * En la casita: lo que Minu va aprendiendo (o que ya los conoce) y el interruptor de sus mensajes
- * personalizados. Siete toques a la constelación abren el ensayo (para revisar en un celular compatible).
+ * personalizados.
  */
 @Composable
-fun MindHouseCard(mind: MinuMindInfo, pet: MinuPet, partnerName: String, onToggle: (Boolean) -> Unit, onSecret: () -> Unit) {
+fun MindHouseCard(mind: MinuMindInfo, pet: MinuPet, partnerName: String, onToggle: (Boolean) -> Unit) {
     val c = MaterialTheme.colorScheme
-    var taps by remember { mutableIntStateOf(0) }
     Surface(color = c.surfaceContainerHigh, shape = LocalAppStyle.current.cardShape) {
         Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             Text(if (mind.awake) "Ya los conozco un poquito" else "Lo que voy aprendiendo", style = MaterialTheme.typography.titleMedium)
             Row(verticalAlignment = Alignment.CenterVertically) {
                 LearningConstellation(
                     if (mind.awake) mind.learnTotal else mind.learned, mind.learnTotal, if (mind.awake) 1f else 0f,
-                    Modifier.width(118.dp).clickable { taps++; if (taps >= 7) { taps = 0; onSecret() } },
+                    Modifier.width(118.dp),
                 )
                 Spacer(Modifier.width(14.dp))
                 Text(

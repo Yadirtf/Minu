@@ -207,8 +207,6 @@ class PartnerHub(
 
     suspend fun setMindOn(on: Boolean) = setDuo(api.setMindOn(on))
     suspend fun seeMindWake() = setDuo(api.seeMindWake())
-    suspend fun mindRehearsal() = api.mindRehearsal()
-    suspend fun rehearseMind(id: String) = api.rehearseMind(id)
 
     // ---------- Pareja ----------
 
