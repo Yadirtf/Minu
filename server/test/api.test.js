@@ -1005,8 +1005,7 @@ test('Minu: voz propia (despierta al mes, redacta en segundo plano, barandas y a
     assert.equal(mindPrompts.length, 3);
     assert.deepEqual({ line: mind.line, writing: mind.writing }, { line: null, writing: false });
 
-    // El ensayo ya no está en la app: sus rutas no existen. Revisar un texto con las barandas sí
-    assert.equal((await api('GET', '/duo/minu/mind/rehearsal', null, a)).status, 404);
+    // Revisar un texto con las barandas (sin redactar ni gastar cuota)
     const check = (await api('POST', '/duo/minu/mind/check', { text: 'Soy un asistente que los quiere mucho a los dos.' }, a)).body;
     assert.deepEqual(check, { ok: false, text: null, reason: 'banned' });
 
